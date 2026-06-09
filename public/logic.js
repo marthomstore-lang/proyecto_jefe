@@ -135,7 +135,8 @@ window.fetch = async function(url, options = {}) {
               'Profesor de Asignatura': x.profesor_asignatura,
               'Profesor PIE': x.profesor_pie,
               'Fecha de Nacimiento': x.fecha_nacimiento,
-              'Estado Matrícula': x.estado
+              'Estado Matrícula': x.estado,
+              Edad: x.edad
             };
           } else if (x.cargo === 'Docente') {
             return {
@@ -815,6 +816,9 @@ async function abrirEditar(rut) {
     if (!p) return;
     
     document.getElementById('edit-orig-rut').value = p.RUT;
+    if (document.getElementById('edit-orig-edad')) {
+      document.getElementById('edit-orig-edad').value = p.Edad || 0;
+    }
     document.getElementById('edit-rut').value = p.RUT;
     document.getElementById('edit-nombres').value = p.Nombres;
     document.getElementById('edit-pat').value = p['Apellido paterno'] || p['Apellido Paterno'] || '';
@@ -866,6 +870,19 @@ async function guardarCambiosPersona() {
   let payload = {};
   
   if (cargo === 'Estudiante') {
+    let calculatedEdad = 0;
+    if (fnac) {
+      const fnDate = new Date(fnac);
+      if (!isNaN(fnDate.getTime())) {
+        const hoy = new Date();
+        calculatedEdad = hoy.getFullYear() - fnDate.getFullYear();
+        const m = hoy.getMonth() - fnDate.getMonth();
+        if (m < 0 || (m === 0 && hoy.getDate() < fnDate.getDate())) calculatedEdad--;
+      }
+    } else if (document.getElementById('edit-orig-edad')) {
+      calculatedEdad = Number(document.getElementById('edit-orig-edad').value) || 0;
+    }
+    
     url = '/api/estudiantes';
     payload = {
       RUT: origRut,
@@ -876,7 +893,7 @@ async function guardarCambiosPersona() {
       "Profesor Jefe": document.getElementById('edit-jefe').value,
       "Fecha de Nacimiento": fnac,
       "Estado Matrícula": document.getElementById('edit-estado-mat').value,
-      Edad: 0
+      Edad: calculatedEdad
     };
   } else if (cargo === 'Docente') {
     url = '/api/docentes';
@@ -1289,11 +1306,23 @@ async function agregarEstudiante() {
     return;
   }
   
+  const fnacVal = document.getElementById('n-fnac').value;
+  let calculatedEdad = 0;
+  if (fnacVal) {
+    const fnDate = new Date(fnacVal);
+    if (!isNaN(fnDate.getTime())) {
+      const hoy = new Date();
+      calculatedEdad = hoy.getFullYear() - fnDate.getFullYear();
+      const m = hoy.getMonth() - fnDate.getMonth();
+      if (m < 0 || (m === 0 && hoy.getDate() < fnDate.getDate())) calculatedEdad--;
+    }
+  }
+
   const payload = {
     RUT: rut, Nombres: nom, 'Apellido Paterno': pat, 'Apellido Materno': mat,
     Cargo: 'Estudiante', Curso: curso, 'Profesor Jefe': document.getElementById('n-jefe').value.trim(),
-    'Fecha de Nacimiento': document.getElementById('n-fnac').value,
-    'Estado Matrícula': document.getElementById('n-estado').value, Edad: 0
+    'Fecha de Nacimiento': fnacVal,
+    'Estado Matrícula': document.getElementById('n-estado').value, Edad: calculatedEdad
   };
   
   try {
