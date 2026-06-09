@@ -1,3 +1,355 @@
+// ══ SUPABASE CLIENT-SIDE API INTERCEPTOR ══
+const SUPABASE_URL = "https://squfklurqnnoujcmvxjh.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_i7ruBqqrqr4ro8YywVk0sQ_VhvY_R-m";
+
+const originalFetch = window.fetch;
+window.fetch = async function(url, options = {}) {
+  if (typeof url === 'string' && url.startsWith('/api/')) {
+    const parsedUrl = new URL(url, window.location.origin);
+    const path = parsedUrl.pathname;
+    const searchParams = parsedUrl.searchParams;
+    const method = options.method ? options.method.toUpperCase() : 'GET';
+    const headers = {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+      ...options.headers
+    };
+    
+    const mockResponse = (data, status = 200) => {
+      return new Response(JSON.stringify(data), {
+        status: status,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    };
+    
+    try {
+      if (path === '/api/login' && method === 'POST') {
+        const body = JSON.parse(options.body);
+        const u = body.username.trim().toLowerCase();
+        const p = body.password;
+        
+        const res = await originalFetch(`${SUPABASE_URL}/rest/v1/usuarios?username=eq.${encodeURIComponent(u)}`, { headers });
+        const users = await res.json();
+        
+        if (users && users.length > 0) {
+          const user = users[0];
+          if (user.password === p) {
+            return mockResponse({
+              success: true,
+              username: user.username,
+              nombre: user.nombre,
+              perfil: user.perfil,
+              rut: user.rut
+            });
+          }
+        }
+        return mockResponse({ success: false, error: 'Usuario o contraseña incorrectos' });
+      }
+      
+      if (path === '/api/stats' && method === 'GET') {
+        const fetchCount = async (table) => {
+          const res = await originalFetch(`${SUPABASE_URL}/rest/v1/${table}?select=count`, {
+            headers: { ...headers, 'Prefer': 'count=exact' }
+          });
+          const contentRange = res.headers.get('Content-Range');
+          if (contentRange) {
+            const count = contentRange.split('/')[1];
+            return parseInt(count, 10) || 0;
+          }
+          const data = await res.json();
+          return data.length || 0;
+        };
+        
+        const [totalEst, totalDoc, totalAsis, totalEnt] = await Promise.all([
+          fetchCount('estudiantes'),
+          fetchCount('docentes'),
+          fetchCount('asistentes'),
+          fetchCount('entrevistas')
+        ]);
+        
+        const fetchCountFilter = async (table, filter) => {
+          const res = await originalFetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}&select=count`, {
+            headers: { ...headers, 'Prefer': 'count=exact' }
+          });
+          const contentRange = res.headers.get('Content-Range');
+          if (contentRange) {
+            const count = contentRange.split('/')[1];
+            return parseInt(count, 10) || 0;
+          }
+          const data = await res.json();
+          return data.length || 0;
+        };
+        
+        const [vig, ret] = await Promise.all([
+          fetchCountFilter('estudiantes', 'estado=eq.Vigente'),
+          fetchCountFilter('estudiantes', 'estado=eq.Retirado')
+        ]);
+        
+        return mockResponse({
+          totalEstudiantes: totalEst,
+          totalDocentes: totalDoc,
+          totalAsistentes: totalAsis,
+          totalEntrevistas: totalEnt,
+          vigentes: vig,
+          retirados: ret
+        });
+      }
+      
+      if (path === '/api/personas/buscar' && method === 'GET') {
+        const q = (searchParams.get('q') || '').trim().toLowerCase();
+        const filtro = (searchParams.get('filtro') || '').trim();
+        
+        let promises = [];
+        if (!filtro || filtro === 'Estudiante') {
+          promises.push(originalFetch(`${SUPABASE_URL}/rest/v1/estudiantes`, { headers }).then(r => r.json()).then(data => data.map(x => ({ ...x, cargo: 'Estudiante' }))));
+        }
+        if (!filtro || filtro === 'Docente') {
+          promises.push(originalFetch(`${SUPABASE_URL}/rest/v1/docentes`, { headers }).then(r => r.json()).then(data => data.map(x => ({ ...x, cargo: 'Docente' }))));
+        }
+        if (!filtro || filtro === 'Asistente de la educación') {
+          promises.push(originalFetch(`${SUPABASE_URL}/rest/v1/asistentes`, { headers }).then(r => r.json()).then(data => data.map(x => ({ ...x, cargo: 'Asistente de la educación' }))));
+        }
+        
+        const resultsArray = await Promise.all(promises);
+        const merged = resultsArray.flat();
+        
+        const filtered = merged.filter(x => {
+          const nameStr = `${x.nombres || ''} ${x.apellido_paterno || ''} ${x.apellido_materno || ''}`.toLowerCase();
+          const rutStr = (x.rut || '').toLowerCase();
+          const funcStr = (x.funcion_curso || x.asignatura || '').toLowerCase();
+          return !q || rutStr.includes(q) || nameStr.includes(q) || funcStr.includes(q);
+        });
+        
+        const mapped = filtered.map(x => {
+          if (x.cargo === 'Estudiante') {
+            return {
+              RUT: x.rut,
+              Nombres: x.nombres,
+              'Apellido Paterno': x.apellido_paterno,
+              'Apellido Materno': x.apellido_materno,
+              Cargo: 'Estudiante',
+              Curso: x.curso,
+              'Función/curso': x.curso,
+              'Profesor Jefe': x.profesor_jefe,
+              'Profesor de Asignatura': x.profesor_asignatura,
+              'Profesor PIE': x.profesor_pie,
+              'Fecha de Nacimiento': x.fecha_nacimiento,
+              'Estado Matrícula': x.estado
+            };
+          } else if (x.cargo === 'Docente') {
+            return {
+              RUT: x.rut,
+              Nombres: x.nombres,
+              'Apellido Paterno': x.apellido_paterno,
+              'Apellido Materno': x.apellido_materno,
+              Cargo: 'Docente',
+              Curso: x.funcion_curso,
+              'Función/curso': x.funcion_curso,
+              Asignatura: x.asignatura,
+              'Horas Contrato': x.horas_contrato,
+              'Estado/Idoneidad': x.idoneidad
+            };
+          } else {
+            return {
+              RUT: x.rut,
+              Nombres: x.nombres,
+              'Apellido Paterno': x.apellido_paterno,
+              'Apellido Materno': x.apellido_materno,
+              Cargo: 'Asistente de la educación',
+              Curso: x.funcion_curso,
+              'Función/curso': x.funcion_curso,
+              'Horas Contrato': x.horas_contrato,
+              'Estado/Idoneidad': x.idoneidad
+            };
+          }
+        });
+        
+        return mockResponse(mapped.slice(0, 100));
+      }
+      
+      const tablesMapping = {
+        '/api/estudiantes': 'estudiantes',
+        '/api/docentes': 'docentes',
+        '/api/asistentes': 'asistentes',
+        '/api/entrevistas': 'entrevistas',
+        '/api/contabilidad': 'contabilidad',
+        '/api/administracion': 'administracion',
+        '/api/usuarios': 'usuarios'
+      };
+      
+      const sbTable = tablesMapping[path];
+      if (sbTable) {
+        if (method === 'GET') {
+          let sbUrl = `${SUPABASE_URL}/rest/v1/${sbTable}`;
+          let params = [];
+          
+          if (sbTable === 'estudiantes') {
+            const curso = searchParams.get('curso');
+            const estado = searchParams.get('estado');
+            if (curso) params.push(`curso=eq.${encodeURIComponent(curso)}`);
+            if (estado) params.push(`estado=eq.${encodeURIComponent(estado)}`);
+          } else if (sbTable === 'docentes' || sbTable === 'asistentes') {
+            const func = searchParams.get('func');
+            if (func) params.push(`funcion_curso=eq.${encodeURIComponent(func)}`);
+          } else if (sbTable === 'entrevistas') {
+            const estado = searchParams.get('estado');
+            if (estado) params.push(`estado=eq.${encodeURIComponent(estado)}`);
+          } else if (sbTable === 'usuarios') {
+            const username = searchParams.get('username');
+            if (username) params.push(`username=eq.${encodeURIComponent(username)}`);
+          }
+          
+          if (params.length > 0) {
+            sbUrl += '?' + params.join('&');
+          }
+          
+          const res = await originalFetch(sbUrl, { headers });
+          let rows = await res.json();
+          
+          const frontendRows = rows.map(r => {
+            const mappedRow = {};
+            for (const k in r) {
+              if (k === 'rut') mappedRow['RUT'] = r[k];
+              else if (k === 'nombres') mappedRow['Nombres'] = r[k];
+              else if (k === 'apellido_paterno') mappedRow['Apellido Paterno'] = r[k];
+              else if (k === 'apellido_materno') mappedRow['Apellido Materno'] = r[k];
+              else if (k === 'profesor_jefe') mappedRow['Profesor Jefe'] = r[k];
+              else if (k === 'profesor_asignatura') mappedRow['Profesor de Asignatura'] = r[k];
+              else if (k === 'profesor_pie') mappedRow['Profesor PIE'] = r[k];
+              else if (k === 'fecha_nacimiento') mappedRow['Fecha de Nacimiento'] = r[k];
+              else if (k === 'estado') mappedRow['Estado Matrícula'] = r[k];
+              else if (k === 'edad') mappedRow['Edad'] = r[k];
+              else if (k === 'funcion_curso') mappedRow['Función/curso'] = r[k];
+              else if (k === 'horas_contrato') mappedRow['Horas contrato'] = r[k];
+              else if (k === 'idoneidad') mappedRow['Estado/Idoneidad'] = r[k];
+              else mappedRow[k] = r[k];
+            }
+            return mappedRow;
+          });
+          
+          const q = (searchParams.get('q') || '').trim().toLowerCase();
+          if (q) {
+            return mockResponse(frontendRows.filter(x => {
+              const nameStr = `${x.Nombres || ''} ${x['Apellido Paterno'] || x['Apellido paterno'] || ''} ${x['Apellido Materno'] || x['Apellido materno'] || ''}`.toLowerCase();
+              const rutStr = (x.RUT || x.id || '').toLowerCase();
+              return nameStr.includes(q) || rutStr.includes(q);
+            }));
+          }
+          
+          return mockResponse(frontendRows);
+        }
+        
+        if (method === 'POST') {
+          const body = JSON.parse(options.body);
+          const dbBody = {};
+          const mapping = {
+            'RUT': 'rut',
+            'Nombres': 'nombres',
+            'Apellido Paterno': 'apellido_paterno',
+            'Apellido Materno': 'apellido_materno',
+            'Curso': 'curso',
+            'Profesor Jefe': 'profesor_jefe',
+            'Profesor de Asignatura': 'profesor_asignatura',
+            'Profesor PIE': 'profesor_pie',
+            'Fecha de Nacimiento': 'fecha_nacimiento',
+            'Estado Matrícula': 'estado',
+            'Edad': 'edad',
+            'Apellido paterno': 'apellido_paterno',
+            'Apellido materno': 'apellido_materno',
+            'Función/curso': 'funcion_curso',
+            'Horas contrato': 'horas_contrato',
+            'Estado/Idoneidad': 'idoneidad',
+            'Profesor de asignatura': 'asignatura'
+          };
+          
+          for (const k in body) {
+            if (mapping[k]) {
+              dbBody[mapping[k]] = body[k];
+            } else {
+              dbBody[k.toLowerCase()] = body[k];
+            }
+          }
+          
+          if (sbTable === 'estudiantes' && dbBody.curso) {
+            if (dbBody.profesor_jefe) {
+              originalFetch(`${SUPABASE_URL}/rest/v1/estudiantes?curso=eq.${encodeURIComponent(dbBody.curso)}`, {
+                method: 'PATCH',
+                headers,
+                body: JSON.stringify({ profesor_jefe: dbBody.profesor_jefe })
+              });
+            } else {
+              const resJefe = await originalFetch(`${SUPABASE_URL}/rest/v1/estudiantes?curso=eq.${encodeURIComponent(dbBody.curso)}&profesor_jefe=not.is.null&profesor_jefe=not.eq.`, { headers });
+              const ests = await resJefe.json();
+              if (ests && ests.length > 0) {
+                dbBody.profesor_jefe = ests[0].profesor_jefe;
+              }
+            }
+          }
+          
+          if ((sbTable === 'contabilidad' || sbTable === 'administracion') && !dbBody.id) {
+            delete dbBody.id;
+          }
+          
+          let responseId = body.id;
+          if (sbTable === 'entrevistas' && (!body.id || body.id === '(vista previa)')) {
+            const resCount = await originalFetch(`${SUPABASE_URL}/rest/v1/entrevistas?select=count`, {
+              headers: { ...headers, 'Prefer': 'count=exact' }
+            });
+            const contentRange = resCount.headers.get('Content-Range');
+            const count = contentRange ? parseInt(contentRange.split('/')[1]) : 0;
+            responseId = `ENT-${String(count + 1).padStart(4, '0')}`;
+            dbBody.id = responseId;
+          }
+          
+          const res = await originalFetch(`${SUPABASE_URL}/rest/v1/${sbTable}`, {
+            method: 'POST',
+            headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+            body: JSON.stringify(dbBody)
+          });
+          
+          if (res.ok) {
+            return mockResponse({ success: true, id: responseId });
+          } else {
+            const errData = await res.json();
+            return mockResponse({ success: false, error: errData.message || 'Error al guardar en Supabase' });
+          }
+        }
+        
+        if (method === 'DELETE') {
+          let sbUrl = `${SUPABASE_URL}/rest/v1/${sbTable}`;
+          if (sbTable === 'estudiantes' || sbTable === 'docentes' || sbTable === 'asistentes') {
+            const rut = searchParams.get('rut');
+            sbUrl += `?rut=eq.${encodeURIComponent(rut)}`;
+          } else if (sbTable === 'usuarios') {
+            const username = searchParams.get('username');
+            if (username === 'admin') {
+              return mockResponse({ success: false, error: 'No se puede eliminar al admin principal' }, 400);
+            }
+            sbUrl += `?username=eq.${encodeURIComponent(username)}`;
+          } else {
+            const id = searchParams.get('id');
+            sbUrl += `?id=eq.${encodeURIComponent(id)}`;
+          }
+          
+          const res = await originalFetch(sbUrl, { method: 'DELETE', headers });
+          if (res.ok) {
+            return mockResponse({ success: true });
+          } else {
+            const errData = await res.json();
+            return mockResponse({ success: false, error: errData.message || 'Error al eliminar en Supabase' });
+          }
+        }
+      }
+      
+    } catch(e) {
+      console.error("Interceptor error:", e);
+      return mockResponse({ success: false, error: e.message || 'Error de conexión con Supabase' }, 500);
+    }
+  }
+  return originalFetch.apply(this, arguments);
+};
+
 // ══ STATE & STORAGE (API DRIVEN) ══
 let entrevistas = [];
 let localCont = [];
