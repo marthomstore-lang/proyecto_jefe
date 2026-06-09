@@ -4,15 +4,177 @@ import sqlite3
 import mimetypes
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
+from dotenv import load_dotenv
+
+# Cargar variables de entorno del archivo .env si existe
+load_dotenv()
 
 PORT = 8080
 DB_PATH = os.path.join(os.path.dirname(__file__), 'campanario.db')
 PUBLIC_DIR = os.path.join(os.path.dirname(__file__), 'public')
 
+SUPABASE_DB_URL = os.getenv('SUPABASE_DB_URL')
+
+# Determinar qué base de datos usar
+if SUPABASE_DB_URL and "postgresql://" in SUPABASE_DB_URL and "[PASSWORD]" not in SUPABASE_DB_URL:
+    try:
+        import psycopg2
+        from psycopg2 import pool
+        import psycopg2.extras
+        DB_ENGINE = "postgresql"
+        # Inicializar el pool de conexiones (min=1, max=10)
+        db_pool = psycopg2.pool.SimpleConnectionPool(1, 10, SUPABASE_DB_URL)
+        print("Conectado a Base de Datos Supabase (PostgreSQL)")
+    except Exception as e:
+        print(f"Error al iniciar el pool de Supabase: {e}. Usando SQLite local como respaldo.")
+        DB_ENGINE = "sqlite"
+else:
+    DB_ENGINE = "sqlite"
+    print("Usando Base de Datos local SQLite (campanario.db)")
+
+
+class RowWrapper(dict):
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self.values())[key]
+        return super().__getitem__(key)
+
+
+class QueryAdapterCursor:
+    def __init__(self, cursor):
+        self.cursor = cursor
+
+    def execute(self, query, params=None):
+        if DB_ENGINE == "postgresql":
+            # 1. Convertir ? a %s
+            query = query.replace('?', '%s')
+            
+            # 2. Traducir INSERT OR REPLACE a ON CONFLICT
+            query_upper = query.strip().upper()
+            if "INSERT OR REPLACE INTO USUARIOS" in query_upper:
+                query = """
+                    INSERT INTO usuarios (username, rut, nombre, password, perfil)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (username) 
+                    DO UPDATE SET rut = EXCLUDED.rut, nombre = EXCLUDED.nombre, 
+                                  password = EXCLUDED.password, perfil = EXCLUDED.perfil
+                """
+            elif "INSERT OR REPLACE INTO ESTUDIANTES" in query_upper:
+                query = """
+                    INSERT INTO estudiantes (
+                        rut, nombres, apellido_paterno, apellido_materno, curso, 
+                        profesor_jefe, profesor_asignatura, profesor_pie, fecha_nacimiento, estado, edad
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (rut) 
+                    DO UPDATE SET nombres = EXCLUDED.nombres, 
+                                  apellido_paterno = EXCLUDED.apellido_paterno, 
+                                  apellido_materno = EXCLUDED.apellido_materno, 
+                                  curso = EXCLUDED.curso, 
+                                  profesor_jefe = EXCLUDED.profesor_jefe, 
+                                  profesor_asignatura = EXCLUDED.profesor_asignatura, 
+                                  profesor_pie = EXCLUDED.profesor_pie, 
+                                  fecha_nacimiento = EXCLUDED.fecha_nacimiento, 
+                                  estado = EXCLUDED.estado, 
+                                  edad = EXCLUDED.edad
+                """
+            elif "INSERT OR REPLACE INTO DOCENTES" in query_upper:
+                query = """
+                    INSERT INTO docentes (
+                        rut, nombres, apellido_paterno, apellido_materno, asignatura, 
+                        funcion_curso, horas_contrato, idoneidad
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (rut) 
+                    DO UPDATE SET nombres = EXCLUDED.nombres, 
+                                  apellido_paterno = EXCLUDED.apellido_paterno, 
+                                  apellido_materno = EXCLUDED.apellido_materno, 
+                                  asignatura = EXCLUDED.asignatura, 
+                                  funcion_curso = EXCLUDED.funcion_curso, 
+                                  horas_contrato = EXCLUDED.horas_contrato, 
+                                  idoneidad = EXCLUDED.idoneidad
+                """
+            elif "INSERT OR REPLACE INTO ASISTENTES" in query_upper:
+                query = """
+                    INSERT INTO asistentes (
+                        rut, nombres, apellido_paterno, apellido_materno, 
+                        funcion_curso, horas_contrato, idoneidad
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (rut) 
+                    DO UPDATE SET nombres = EXCLUDED.nombres, 
+                                  apellido_paterno = EXCLUDED.apellido_paterno, 
+                                  apellido_materno = EXCLUDED.apellido_materno, 
+                                  funcion_curso = EXCLUDED.funcion_curso, 
+                                  horas_contrato = EXCLUDED.horas_contrato, 
+                                  idoneidad = EXCLUDED.idoneidad
+                """
+            elif "INSERT OR REPLACE INTO ENTREVISTAS" in query_upper:
+                query = """
+                    INSERT INTO entrevistas (
+                        id, rut, nombre, cargo, curso, jefe, asig, pie, fecha, 
+                        hora, resp, estado, seguimiento, objetivo, motivo, acuerdos, obs
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id) 
+                    DO UPDATE SET rut = EXCLUDED.rut, 
+                                  nombre = EXCLUDED.nombre, 
+                                  cargo = EXCLUDED.cargo, 
+                                  curso = EXCLUDED.curso, 
+                                  jefe = EXCLUDED.jefe, 
+                                  asig = EXCLUDED.asig, 
+                                  pie = EXCLUDED.pie, 
+                                  fecha = EXCLUDED.fecha, 
+                                  hora = EXCLUDED.hora, 
+                                  resp = EXCLUDED.resp, 
+                                  estado = EXCLUDED.estado, 
+                                  seguimiento = EXCLUDED.seguimiento, 
+                                  objetivo = EXCLUDED.objetivo, 
+                                  motivo = EXCLUDED.motivo, 
+                                  acuerdos = EXCLUDED.acuerdos, 
+                                  obs = EXCLUDED.obs
+                """
+
+        if params is not None:
+            return self.cursor.execute(query, params)
+        else:
+            return self.cursor.execute(query)
+
+    def fetchone(self):
+        row = self.cursor.fetchone()
+        if row is None:
+            return None
+        return RowWrapper(row) if DB_ENGINE == "postgresql" else row
+
+    def fetchall(self):
+        rows = self.cursor.fetchall()
+        if DB_ENGINE == "postgresql":
+            return [RowWrapper(r) for r in rows]
+        return rows
+
+    def __getattr__(self, name):
+        return getattr(self.cursor, name)
+
+
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if DB_ENGINE == "postgresql":
+        return db_pool.getconn()
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+
+def release_db_connection(conn):
+    if DB_ENGINE == "postgresql":
+        db_pool.putconn(conn)
+    else:
+        conn.close()
+
+
+def get_db_cursor(conn):
+    if DB_ENGINE == "postgresql":
+        import psycopg2.extras
+        raw_cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    else:
+        raw_cursor = conn.cursor()
+    return QueryAdapterCursor(raw_cursor)
 
 class CampanarioRequestHandler(BaseHTTPRequestHandler):
     
@@ -88,7 +250,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
 
     def handle_api_get(self, path, query):
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = get_db_cursor(conn)
         
         try:
             # ── LISTADO DE USUARIOS ──
@@ -327,7 +489,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": str(e)}, status=500)
         finally:
-            conn.close()
+            release_db_connection(conn)
 
     def do_POST(self):
         parsed_url = urlparse(self.path)
@@ -344,7 +506,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
             return
 
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = get_db_cursor(conn)
         
         try:
             # ── LOGIN ──
@@ -557,7 +719,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": str(e)}, status=500)
         finally:
-            conn.close()
+            release_db_connection(conn)
 
     def do_DELETE(self):
         parsed_url = urlparse(self.path)
@@ -565,7 +727,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
         query = parse_qs(parsed_url.query)
 
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = get_db_cursor(conn)
         
         try:
             # ── ELIMINAR USUARIO ──
@@ -648,7 +810,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": str(e)}, status=500)
         finally:
-            conn.close()
+            release_db_connection(conn)
 
 def run_server():
     # Asegurarse que el directorio public existe
@@ -656,8 +818,8 @@ def run_server():
     
     # Asegurarse de que la tabla de usuarios esté creada e inicializada
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS usuarios (
             username TEXT PRIMARY KEY,
@@ -667,16 +829,28 @@ def run_server():
             perfil TEXT
         )
         """)
+        conn.commit()
+        
         cursor.execute("SELECT COUNT(*) FROM usuarios")
-        if cursor.fetchone()[0] == 0:
+        row = cursor.fetchone()
+        count = 0
+        if row:
+            if isinstance(row, dict):
+                count = list(row.values())[0]
+            else:
+                count = row[0]
+                
+        if count == 0:
             cursor.execute("""
             INSERT INTO usuarios (username, rut, nombre, password, perfil)
             VALUES (?, ?, ?, ?, ?)
             """, ("admin", "1-9", "Administrador Principal", "admin", "Administrador"))
             conn.commit()
-        conn.close()
     except Exception as e:
         print(f"Error al inicializar la tabla de usuarios: {e}")
+    finally:
+        if 'conn' in locals():
+            release_db_connection(conn)
 
     server_address = ('', PORT)
     httpd = HTTPServer(server_address, CampanarioRequestHandler)
