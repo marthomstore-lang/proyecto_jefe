@@ -209,21 +209,39 @@ window.fetch = async function(url, options = {}) {
           
           const frontendRows = rows.map(r => {
             const mappedRow = {};
-            for (const k in r) {
-              if (k === 'rut') mappedRow['RUT'] = r[k];
-              else if (k === 'nombres') mappedRow['Nombres'] = r[k];
-              else if (k === 'apellido_paterno') mappedRow['Apellido Paterno'] = r[k];
-              else if (k === 'apellido_materno') mappedRow['Apellido Materno'] = r[k];
-              else if (k === 'profesor_jefe') mappedRow['Profesor Jefe'] = r[k];
-              else if (k === 'profesor_asignatura') mappedRow['Profesor de Asignatura'] = r[k];
-              else if (k === 'profesor_pie') mappedRow['Profesor PIE'] = r[k];
-              else if (k === 'fecha_nacimiento') mappedRow['Fecha de Nacimiento'] = r[k];
-              else if (k === 'estado') mappedRow['Estado Matrícula'] = r[k];
-              else if (k === 'edad') mappedRow['Edad'] = r[k];
-              else if (k === 'funcion_curso') mappedRow['Función/curso'] = r[k];
-              else if (k === 'horas_contrato') mappedRow['Horas contrato'] = r[k];
-              else if (k === 'idoneidad') mappedRow['Estado/Idoneidad'] = r[k];
-              else mappedRow[k] = r[k];
+            if (sbTable === 'estudiantes') {
+              mappedRow['RUT'] = r.rut;
+              mappedRow['Nombres'] = r.nombres;
+              mappedRow['Apellido Paterno'] = r.apellido_paterno;
+              mappedRow['Apellido Materno'] = r.apellido_materno;
+              mappedRow['Curso'] = r.curso;
+              mappedRow['Profesor Jefe'] = r.profesor_jefe;
+              mappedRow['Profesor de Asignatura'] = r.profesor_asignatura;
+              mappedRow['Profesor PIE'] = r.profesor_pie;
+              mappedRow['Fecha de Nacimiento'] = r.fecha_nacimiento;
+              mappedRow['Estado Matrícula'] = r.estado;
+              mappedRow['Edad'] = r.edad;
+            } else if (sbTable === 'docentes') {
+              mappedRow['RUT'] = r.rut;
+              mappedRow['Nombres'] = r.nombres;
+              mappedRow['Apellido paterno'] = r.apellido_paterno;
+              mappedRow['Apellido materno'] = r.apellido_materno;
+              mappedRow['Profesor de asignatura'] = r.asignatura;
+              mappedRow['Función/curso'] = r.funcion_curso;
+              mappedRow['Horas contrato'] = r.horas_contrato;
+              mappedRow['Estado/Idoneidad'] = r.idoneidad;
+            } else if (sbTable === 'asistentes') {
+              mappedRow['RUT'] = r.rut;
+              mappedRow['Nombres'] = r.nombres;
+              mappedRow['Apellido paterno'] = r.apellido_paterno;
+              mappedRow['Apellido materno'] = r.apellido_materno;
+              mappedRow['Función/curso'] = r.funcion_curso;
+              mappedRow['Horas contrato'] = r.horas_contrato;
+              mappedRow['Estado/Idoneidad'] = r.idoneidad;
+            } else {
+              for (const k in r) {
+                mappedRow[k] = r[k];
+              }
             }
             return mappedRow;
           });
