@@ -165,6 +165,12 @@ window.fetch = async function(url, options = {}) {
           }
         });
         
+        mapped.sort((a, b) => {
+          const nameA = `${a.Nombres || ''} ${a['Apellido Paterno'] || a['Apellido paterno'] || ''} ${a['Apellido Materno'] || a['Apellido materno'] || ''}`.trim().replace(/\s+/g, ' ').toLowerCase();
+          const nameB = `${b.Nombres || ''} ${b['Apellido Paterno'] || b['Apellido paterno'] || ''} ${b['Apellido Materno'] || b['Apellido materno'] || ''}`.trim().replace(/\s+/g, ' ').toLowerCase();
+          return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+        });
+        
         return mockResponse(mapped.slice(0, 100));
       }
       
@@ -509,6 +515,11 @@ async function populateProfesorJefeDropdowns() {
     console.log("populateProfesorJefeDropdowns: Fetching docentes list...");
     const res = await fetch('/api/docentes?_=' + Date.now());
     const docentes = await res.json();
+    docentes.sort((a, b) => {
+      const nameA = `${a.Nombres || ''} ${a['Apellido paterno'] || a['Apellido Paterno'] || ''} ${a['Apellido materno'] || a['Apellido Materno'] || ''}`.trim().replace(/\s+/g, ' ').toLowerCase();
+      const nameB = `${b.Nombres || ''} ${b['Apellido paterno'] || b['Apellido Paterno'] || ''} ${b['Apellido materno'] || b['Apellido Materno'] || ''}`.trim().replace(/\s+/g, ' ').toLowerCase();
+      return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+    });
     console.log("populateProfesorJefeDropdowns: Docentes loaded:", docentes.length);
     
     const nJefe = document.getElementById('n-jefe');
@@ -671,6 +682,11 @@ async function filtrarDoc() {
   try {
     const res = await fetch(`/api/docentes?q=${encodeURIComponent(q)}&func=${encodeURIComponent(func)}`);
     const rows = await res.json();
+    rows.sort((a, b) => {
+      const nameA = `${a.Nombres || ''} ${a['Apellido paterno'] || a['Apellido Paterno'] || ''} ${a['Apellido materno'] || a['Apellido Materno'] || ''}`.trim().replace(/\s+/g, ' ').toLowerCase();
+      const nameB = `${b.Nombres || ''} ${b['Apellido paterno'] || b['Apellido Paterno'] || ''} ${b['Apellido materno'] || b['Apellido Materno'] || ''}`.trim().replace(/\s+/g, ' ').toLowerCase();
+      return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+    });
     
     document.getElementById('doc-count').textContent = `Mostrando ${rows.length} registros`;
     const tbody = document.querySelector('#tbl-doc tbody');
@@ -1533,6 +1549,8 @@ async function renderConfiguracion() {
         cargo: 'Asistente'
       });
     });
+    
+    listaPersonalGlobal.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
     
     const select = document.getElementById('u-personal');
     const valAnterior = select.value;
