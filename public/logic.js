@@ -625,6 +625,45 @@ async function initEstFiltros() {
   }
 }
 
+function formatEdadExacta(fechaNacimientoStr, edadOriginal) {
+  if (!fechaNacimientoStr) return edadOriginal != null && edadOriginal !== '' && edadOriginal !== 0 ? `${edadOriginal} años` : '';
+  
+  // Parse YYYY-MM-DD as local to avoid timezone shifts
+  const parts = fechaNacimientoStr.split('-');
+  let fNac;
+  if (parts.length === 3) {
+    fNac = new Date(parts[0], parts[1] - 1, parts[2]);
+  } else {
+    fNac = new Date(fechaNacimientoStr);
+  }
+  
+  if (isNaN(fNac.getTime())) return edadOriginal != null && edadOriginal !== '' && edadOriginal !== 0 ? `${edadOriginal} años` : '';
+  
+  const hoy = new Date();
+  let years = hoy.getFullYear() - fNac.getFullYear();
+  let months = hoy.getMonth() - fNac.getMonth();
+  let days = hoy.getDate() - fNac.getDate();
+  
+  if (days < 0) {
+    months--;
+    const prevMonth = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+    days += prevMonth.getDate();
+  }
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+  
+  if (years < 0) return '';
+  
+  let outParts = [];
+  if (years > 0) outParts.push(`${years} año${years !== 1 ? 's' : ''}`);
+  if (months > 0) outParts.push(`${months} mes${months !== 1 ? 'es' : ''}`);
+  if (days > 0) outParts.push(`${days} día${days !== 1 ? 's' : ''}`);
+  
+  return outParts.length > 0 ? outParts.join(', ') : '0 días';
+}
+
 async function filtrarEst() {
   const q = txt(document.getElementById('est-q').value).toLowerCase();
   const cur = document.getElementById('est-curso').value;
@@ -642,7 +681,7 @@ async function filtrarEst() {
       <td><strong>${esc(e.Nombres)}</strong></td>
       <td>${esc(txt(e['Apellido Paterno']) + ' ' + txt(e['Apellido Materno']))}</td>
       <td>${esc(e.Curso)}</td>
-      <td>${esc(e.Edad || '')}</td>
+      <td>${esc(formatEdadExacta(e['Fecha de Nacimiento'], e.Edad))}</td>
       <td><span class="badge ${e['Estado Matrícula'] === 'Vigente' ? 'badge-verde' : 'badge-rojo'}">${esc(e['Estado Matrícula'])}</span></td>
       <td>
         <div style="display:flex;gap:6px">
