@@ -664,6 +664,40 @@ function formatEdadExacta(fechaNacimientoStr, edadOriginal) {
   return outParts.length > 0 ? outParts.join(', ') : '0 días';
 }
 
+let estSortCol = '';
+let estSortAsc = true;
+
+function sortEstTable(col) {
+  if (estSortCol === col) {
+    estSortAsc = !estSortAsc;
+  } else {
+    estSortCol = col;
+    estSortAsc = true;
+  }
+  filtrarEst();
+}
+
+function updateEstSortHeaders() {
+  const map = {
+    'RUT': 'th-est-rut',
+    'Nombres': 'th-est-nom',
+    'Apellidos': 'th-est-ape',
+    'Curso': 'th-est-cur',
+    'Edad': 'th-est-edad',
+    'Estado Matrícula': 'th-est-est'
+  };
+  for (const col in map) {
+    const el = document.getElementById(map[col]);
+    if (el) {
+      let text = el.textContent.replace(' ▲', '').replace(' ▼', '');
+      if (col === estSortCol) {
+        text += estSortAsc ? ' ▲' : ' ▼';
+      }
+      el.textContent = text;
+    }
+  }
+}
+
 async function filtrarEst() {
   const q = txt(document.getElementById('est-q').value).toLowerCase();
   const cur = document.getElementById('est-curso').value;
@@ -671,7 +705,38 @@ async function filtrarEst() {
   
   try {
     const res = await fetch(`/api/estudiantes?q=${encodeURIComponent(q)}&curso=${encodeURIComponent(cur)}&estado=${encodeURIComponent(est)}`);
-    const rows = await res.json();
+    let rows = await res.json();
+    
+    if (estSortCol) {
+      rows.sort((a, b) => {
+        let valA = a[estSortCol] || '';
+        let valB = b[estSortCol] || '';
+        
+        if (estSortCol === 'Apellidos') {
+          valA = (a['Apellido Paterno'] || '') + ' ' + (a['Apellido Materno'] || '');
+          valB = (b['Apellido Paterno'] || '') + ' ' + (b['Apellido Materno'] || '');
+        } else if (estSortCol === 'Edad') {
+          valA = a['Fecha de Nacimiento'] || '9999-12-31';
+          valB = b['Fecha de Nacimiento'] || '9999-12-31';
+          if (!a['Fecha de Nacimiento'] && a.Edad) valA = String(1000 - a.Edad);
+          if (!b['Fecha de Nacimiento'] && b.Edad) valB = String(1000 - b.Edad);
+        }
+        
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+        
+        if (typeof valA === 'string' && typeof valB === 'string') {
+           const cmp = valA.localeCompare(valB, 'es', { numeric: true });
+           return estSortAsc ? cmp : -cmp;
+        }
+        
+        if (valA < valB) return estSortAsc ? -1 : 1;
+        if (valA > valB) return estSortAsc ? 1 : -1;
+        return 0;
+      });
+    }
+
+    updateEstSortHeaders();
     
     document.getElementById('est-count').textContent = `Mostrando ${rows.length} registros`;
     const tbody = document.querySelector('#tbl-est tbody');
