@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema Integral — Liceo Técnico Profesional Campanario</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="login-active">
+
+<section id="login-screen">
+  <div class="login-blobs">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+  <div class="login-card">
+    <div class="login-lock">🔒</div>
+    <h1>Sistema Interno de Entrevistas</h1>
+    <div class="login-sub">Liceo Técnico Profesional Campanario</div>
+    <div class="login-field"><span>👤</span><input id="login-user" autocomplete="username" placeholder="Usuario"></div>
+    <div class="login-field"><span>🔐</span><input id="login-pass" autocomplete="current-password" type="password" placeholder="Contraseña"><button type="button" onclick="togglePass()" style="background:transparent;border:0;color:white;cursor:pointer;font-size:18px">👁</button></div>
+    <button class="login-btn" onclick="login()">↪ INICIAR SESIÓN</button>
+    <div id="login-error" class="login-error">Usuario o contraseña incorrectos.</div>
+  </div>
+</section>
+
+<div id="app-shell">
+
+<!-- HEADER -->
+<header>
+  <button class="menu-btn" onclick="toggleSidebar()" aria-label="Menú">&#9776;</button>
+  <span class="logo">🏫 Liceo Técnico Profesional Campanario</span>
+  <span class="subtitle">RBD 3941 · Sistema Integral 2026</span>
+  
+  <div class="user-info">
+    <div class="user-badge">
+      <div class="user-avatar">AD</div>
+      <span>Administrador</span>
+    </div>
+    <button class="top-logout" onclick="logout()">
+      <span>Cerrar sesión</span> ↪
+    </button>
+  </div>
+</header>
+
+<!-- SIDEBAR NAV -->
+<nav id="sidebar">
+  <div class="nav-section">
+    <div class="nav-label">Inicio</div>
+    <div class="nav-item active" onclick="goTo('inicio')"><span class="icon">🏠</span> Panel de control</div>
+  </div>
+  
+  <hr class="nav-divider">
+  
+  <div class="nav-section">
+    <div class="nav-label">Áreas de gestión</div>
+    <div class="nav-item" onclick="goTo('rrhh')"><span class="icon">👥</span> Recursos Humanos</div>
+    <div class="nav-item" onclick="goTo('educacion')"><span class="icon">🎓</span> Educación</div>
+    <div class="nav-item" onclick="goTo('administracion')"><span class="icon">🏫</span> Administración</div>
+  </div>
+  
+  <hr class="nav-divider">
+  
+  <div class="nav-section">
+    <div class="nav-label">Base de Datos</div>
+    <div class="nav-item" onclick="goTo('estudiantes')"><span class="icon">🎒</span> Estudiantes <span class="badge-count" id="cnt-est">0</span></div>
+    <div class="nav-item" onclick="goTo('docentes')"><span class="icon">👨‍🏫</span> Docentes <span class="badge-count" id="cnt-doc">0</span></div>
+    <div class="nav-item" onclick="goTo('asistentes')"><span class="icon">👥</span> Asistentes educ. <span class="badge-count" id="cnt-asi">0</span></div>
+  </div>
+  
+  <hr class="nav-divider">
+  
+  <div class="nav-section">
+    <div class="nav-label">Entrevistas</div>
+    <div class="nav-item" onclick="goTo('nueva-entrevista')"><span class="icon">📝</span> Nueva entrevista</div>
+    <div class="nav-item" onclick="goTo('historial')"><span class="icon">🕘</span> Historial <span class="badge-count" id="cnt-ent">0</span></div>
+    <div class="nav-item" onclick="goTo('reporte')"><span class="icon">📄</span> Ficha Impresión</div>
+  </div>
+  
+  <hr class="nav-divider">
+  
+  <div class="nav-section">
+    <div class="nav-label">Utilidades</div>
+    <div class="nav-item" onclick="goTo('agregar-persona')"><span class="icon">➕</span> Agregar persona</div>
+    <div class="nav-item" onclick="exportarDatos()"><span class="icon">💾</span> Exportar datos</div>
+    <div class="nav-item" id="nav-config" onclick="goTo('configuracion')" style="display: none;"><span class="icon">⚙️</span> Configuración</div>
+  </div>
+</nav>
+
+<!-- MAIN CONTENT -->
+<main id="main-content">
+
+<!-- ══════════════ INICIO ══════════════ -->
+<div class="page active" id="pg-inicio">
+  <div class="welcome-hero">
+    <h1>¿En qué trabajaremos hoy?</h1>
+    <p>Bienvenido al Sistema Integral del Liceo LTP Campanario. Seleccione un módulo de gestión o utilice el buscador global para consultar estudiantes, personal, o registrar entrevistas.</p>
+  </div>
+  
+  <div class="area-grid">
+    <div class="area-card rrhh" onclick="goTo('rrhh')">
+      <div class="area-icon">👥</div>
+      <h3>Recursos Humanos</h3>
+      <p>Gestión de docentes, asistentes, idoneidad y horas contrato.</p>
+    </div>
+    <div class="area-card edu" onclick="goTo('educacion')">
+      <div class="area-icon">🎓</div>
+      <h3>Educación</h3>
+      <p>Base de estudiantes, cursos, estado de matrículas y entrevistas.</p>
+    </div>
+    <div class="area-card admin" onclick="goTo('administracion')">
+      <div class="area-icon">🏫</div>
+      <h3>Administración</h3>
+      <p>Gestión de oficios, actas, reglamentos y documentación institucional.</p>
+    </div>
+  </div>
+  
+  <div class="card" style="margin-bottom: 24px;">
+    <div class="card-title">📊 Resumen Estadístico Institucional</div>
+    <div class="gauge-container" style="margin-top: 16px;">
+      <!-- Gauge 1 -->
+      <div class="gauge-card">
+        <svg class="gauge-svg">
+          <circle class="gauge-bg" cx="30" cy="30" r="27"></circle>
+          <circle class="gauge-bar" id="g-mat-bar" cx="30" cy="30" r="27"></circle>
+        </svg>
+        <div class="gauge-info">
+          <span class="gauge-title">Matrícula Vigente</span>
+          <span class="gauge-val" id="g-mat-val">0%</span>
+        </div>
+      </div>
+      <!-- Gauge 3 -->
+      <div class="gauge-card">
+        <svg class="gauge-svg">
+          <circle class="gauge-bg" cx="30" cy="30" r="27"></circle>
+          <circle class="gauge-bar" id="g-ent-bar" cx="30" cy="30" r="27" style="stroke: var(--success);"></circle>
+        </svg>
+        <div class="gauge-info">
+          <span class="gauge-title">Entrevistas Registradas</span>
+          <span class="gauge-val" id="g-ent-val">0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat stat-est">
+      <div class="stat-icon">🎒</div>
+      <div class="stat-info">
+        <div class="n" id="s-est">0</div>
+        <div class="l">Total Estudiantes</div>
+      </div>
+    </div>
+    <div class="stat stat-doc">
+      <div class="stat-icon">👨‍🏫</div>
+      <div class="stat-info">
+        <div class="n" id="s-doc">0</div>
+        <div class="l">Total Docentes</div>
+      </div>
+    </div>
+    <div class="stat stat-asi">
+      <div class="stat-icon">👥</div>
+      <div class="stat-info">
+        <div class="n" id="s-asi">0</div>
+        <div class="l">Asistentes educación</div>
+      </div>
+    </div>
+    <div class="stat stat-ent">
+      <div class="stat-icon">📝</div>
+      <div class="stat-info">
+        <div class="n" id="s-ent">0</div>
+        <div class="l">Entrevistas registradas</div>
+      </div>
+    </div>
+    <div class="stat stat-vig">
+      <div class="stat-icon">🟢</div>
+      <div class="stat-info">
+        <div class="n" id="s-vig">0</div>
+        <div class="l">Matrículas vigentes</div>
+      </div>
+    </div>
+    <div class="stat stat-ret">
+      <div class="stat-icon">🔴</div>
+      <div class="stat-info">
+        <div class="n" id="s-ret">0</div>
+        <div class="l">Estudiantes retirados</div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">🔎 Buscador Global Institucional</div>
+    </div>
+    <div class="search-row">
+      <input id="g-q" placeholder="Buscar por RUT, nombres o apellidos..." oninput="buscarGlobal()">
+      <select id="g-filtro" onchange="buscarGlobal()">
+        <option value="">Todos los estamentos</option>
+        <option value="Estudiante">Estudiantes</option>
+        <option value="Docente">Docentes</option>
+        <option value="Asistente de la educación">Asistentes educación</option>
+      </select>
+    </div>
+    <div class="tbl-wrap">
+      <table id="tbl-global">
+        <thead>
+          <tr>
+            <th>RUT</th>
+            <th>Nombres</th>
+            <th>Apellidos</th>
+            <th>Estamento</th>
+            <th>Cargo/Curso</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════ RECURSOS HUMANOS ══════════════ -->
+<div class="page" id="pg-rrhh">
+  <div class="welcome-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%)">
+    <h1>👥 Recursos Humanos</h1>
+    <p>Administración de personal docente y asistentes de la educación, control de idoneidad, asignación de horas de contrato y ficha de seguimiento interno.</p>
+  </div>
+  <div class="module-actions">
+    <div class="module-action" onclick="goTo('docentes')">
+      <strong>Base de Docentes</strong>
+      <span>Consultar asignaturas, funciones, horas de contrato y estado de idoneidad.</span>
+    </div>
+    <div class="module-action" onclick="goTo('asistentes')">
+      <strong>Base de Asistentes</strong>
+      <span>Consultar roles de apoyo, fonoaudiólogos, psicólogos, asistentes diferenciales e inspectores.</span>
+    </div>
+    <div class="module-action" onclick="goTo('nueva-entrevista')">
+      <strong>Entrevista a Funcionario</strong>
+      <span>Generar una nueva ficha de entrevista y acuerdos para docentes o personal administrativo.</span>
+    </div>
+    <div class="module-action" onclick="exportarDatos()">
+      <strong>Respaldo local de datos</strong>
+      <span>Exportar la información acumulada en formato JSON para seguridad y auditoría.</span>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- ══════════════ EDUCACIÓN ══════════════ -->
+<div class="page" id="pg-educacion">
+  <div class="welcome-hero" style="background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)">
+    <h1>🎓 Módulo de Educación</h1>
+    <p>Consola de control de la matrícula escolar, seguimiento de estudiantes vigentes o retirados, historial de entrevistas formativas, impresión de fichas de compromisos y registro local.</p>
+  </div>
+  <div class="module-actions">
+    <div class="module-action" onclick="goTo('estudiantes')">
+      <strong>Base de Estudiantes</strong>
+      <span>Buscador por curso, edad, RUT, matrícula vigente y ficha individual.</span>
+    </div>
+    <div class="module-action" onclick="goTo('nueva-entrevista')">
+      <strong>Nueva entrevista</strong>
+      <span>Registrar acuerdos con apoderados o estudiantes y derivaciones internas.</span>
+    </div>
+    <div class="module-action" onclick="goTo('historial')">
+      <strong>Historial entrevistas</strong>
+      <span>Revisar, editar o eliminar las actas de entrevistas archivadas en el navegador.</span>
+    </div>
+    <div class="module-action" onclick="goTo('reporte')">
+      <strong>Visualizar Ficha de Reporte</strong>
+      <span>Formatear la última entrevista activa para su impresión oficial o descarga en PDF.</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════ ADMINISTRACIÓN (OPERATIVA) ══════════════ -->
+<div class="page" id="pg-administracion">
+  <div class="welcome-hero" style="background: linear-gradient(135deg, #581c87 0%, #7c3aed 100%)">
+    <h1>🏫 Gestión de Administración y Protocolos</h1>
+    <p>Archivo administrativo local para persistir el control de oficios, resoluciones, circulares y reglamentos del establecimiento.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📝 Registrar Documento Administrativo</div>
+    <div class="form-grid" style="margin-top:16px">
+      <div class="form-group">
+        <label>Fecha de emisión</label>
+        <input type="date" id="a-fecha">
+      </div>
+      <div class="form-group">
+        <label>Tipo de documento</label>
+        <select id="a-tipo">
+          <option value="Oficio">Oficio</option>
+          <option value="Resolución">Resolución</option>
+          <option value="Protocolo">Protocolo</option>
+          <option value="Reglamento">Reglamento</option>
+          <option value="Acta de Consejo">Acta de Consejo</option>
+          <option value="Otro">Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Título / Referencia</label>
+        <input id="a-titulo" placeholder="Ej: Oficio N°24 Ord. SEP">
+      </div>
+      <div class="form-group">
+        <label>Responsable</label>
+        <input id="a-resp" placeholder="Nombre emisor / firmante">
+      </div>
+      <div class="form-group">
+        <label>Estado del proceso</label>
+        <select id="a-estado">
+          <option value="Pendiente">Pendiente</option>
+          <option value="En proceso">En proceso</option>
+          <option value="Finalizado">Finalizado</option>
+          <option value="Archivado">Archivado</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-top:12px">
+      <label>Descripción / Extracto</label>
+      <textarea id="a-desc" placeholder="Resumen del documento, decretos asociados o acuerdos tomados..."></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="guardarAdmin()">💾 Guardar en archivo local</button>
+      <button class="btn btn-secondary" onclick="limpiarAdmin()">✖ Limpiar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📂 Archivo Documental Institucional</div>
+    <div class="tbl-wrap" style="margin-top:16px">
+      <table id="tbl-admin">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Tipo</th>
+            <th>Título / Ref.</th>
+            <th>Responsable</th>
+            <th>Estado</th>
+            <th>Descripción</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="7" style="text-align:center;color:var(--text-muted)">No hay documentos registrados.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════ ESTUDIANTES ══════════════ -->
+<div class="page" id="pg-estudiantes">
+  <div class="card-header">
+    <div class="card-title">🎒 Base de Datos — Estudiantes del Establecimiento</div>
+  </div>
+  <div class="card">
+    <div class="search-row">
+      <input id="est-q" placeholder="Buscar por RUT, nombre o apellido..." oninput="filtrarEst()">
+      <select id="est-curso" onchange="filtrarEst()"><option value="">Todos los cursos</option></select>
+      <select id="est-estado" onchange="filtrarEst()">
+        <option value="">Todos los estados</option>
+        <option value="Vigente">Vigente</option>
+        <option value="Retirado">Retirado</option>
+      </select>
+    </div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;font-weight:500;" id="est-count"></div>
+    <div class="tbl-wrap">
+      <table id="tbl-est">
+        <thead>
+          <tr>
+            <th>RUT</th>
+            <th>Nombres</th>
+            <th>Apellidos</th>
+            <th>Curso</th>
+            <th>Edad</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════ DOCENTES ══════════════ -->
+<div class="page" id="pg-docentes">
+  <div class="card-header">
+    <div class="card-title">👨‍🏫 Base de Datos — Docentes de Aula y Dirección</div>
+  </div>
+  <div class="card">
+    <div class="search-row">
+      <input id="doc-q" placeholder="Buscar por RUT, nombre, asignatura..." oninput="filtrarDoc()">
+      <select id="doc-func" onchange="filtrarDoc()"><option value="">Todas las funciones</option></select>
+    </div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;font-weight:500;" id="doc-count"></div>
+    <div class="tbl-wrap">
+      <table id="tbl-doc">
+        <thead>
+          <tr>
+            <th>RUT</th>
+            <th>Nombres</th>
+            <th>Apellidos</th>
+            <th>Asignatura</th>
+            <th>Función</th>
+            <th>Horas</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════ ASISTENTES ══════════════ -->
+<div class="page" id="pg-asistentes">
+  <div class="card-header">
+    <div class="card-title">👥 Base de Datos — Asistentes de la Educación</div>
+  </div>
+  <div class="card">
+    <div class="search-row">
+      <input id="asi-q" placeholder="Buscar por RUT, nombre o apellido..." oninput="filtrarAsi()">
+      <select id="asi-func" onchange="filtrarAsi()"><option value="">Todas las funciones</option></select>
+    </div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;font-weight:500;" id="asi-count"></div>
+    <div class="tbl-wrap">
+      <table id="tbl-asi">
+        <thead>
+          <tr>
+            <th>RUT</th>
+            <th>Nombres</th>
+            <th>Apellidos</th>
+            <th>Función</th>
+            <th>Horas</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════ NUEVA ENTREVISTA ══════════════ -->
+<div class="page" id="pg-nueva-entrevista">
+  <div class="card-header" style="margin-bottom:12px">
+    <div class="card-title">📝 Ficha de Nueva Entrevista Institucional</div>
+  </div>
+  
+  <div class="card">
+    <div class="card-title" style="margin-bottom:16px; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px">
+      👤 Datos del Entrevistado
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="abrirLookup()">🔍 Buscar en la Base de Datos</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>RUT entrevistado</label>
+        <input id="e-rut" placeholder="Ej: 12.345.678-9" onblur="autocompletarEnt()">
+      </div>
+      <div class="form-group">
+        <label>Nombre completo</label>
+        <input id="e-nombre" placeholder="Se autocompleta al ingresar RUT">
+      </div>
+      <div class="form-group">
+        <label>Cargo / Estamento</label>
+        <input id="e-cargo" placeholder="Estudiante, Docente, Asistente, etc.">
+      </div>
+      <div class="form-group">
+        <label>Curso / Función</label>
+        <input id="e-curso" placeholder="Ej: 3° Medio Mecánica o Auxiliar Aseo">
+      </div>
+    </div>
+    <div class="form-grid" style="margin-top:16px">
+      <div class="form-group">
+        <label>Profesor Jefe (Curso)</label>
+        <input id="e-jefe" placeholder="Solo aplica si el entrevistado es Estudiante">
+      </div>
+      <div class="form-group">
+        <label>Profesor Asignatura</label>
+        <input id="e-asig" placeholder="Ej: Mecánica Industrial">
+      </div>
+      <div class="form-group">
+        <label>Profesor / Especialista PIE</label>
+        <input id="e-pie" placeholder="Nombre del especialista del programa PIE">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title" style="margin-bottom:16px; font-size:15px; font-weight:600">📋 Antecedentes y Compromisos de la Entrevista</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Fecha de la cita</label>
+        <input type="date" id="e-fecha">
+      </div>
+      <div class="form-group">
+        <label>Hora</label>
+        <input type="time" id="e-hora">
+      </div>
+      <div class="form-group">
+        <label>Responsable de entrevista</label>
+        <input id="e-resp" placeholder="Nombre y firma de quien entrevista">
+      </div>
+      <div class="form-group">
+        <label>Estado de la ficha</label>
+        <select id="e-estado">
+          <option value="Abierta">Abierta</option>
+          <option value="En seguimiento">En seguimiento</option>
+          <option value="Cerrada">Cerrada</option>
+          <option value="Derivada">Derivada</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Fecha próxima revisión (Seguimiento)</label>
+        <input type="date" id="e-seguimiento">
+      </div>
+    </div>
+    
+    <div class="form-grid" style="margin-top:16px">
+      <div class="form-group">
+        <label>Objetivo de la entrevista</label>
+        <textarea id="e-objetivo" rows="4" placeholder="Describa el propósito principal del encuentro académico/conductual..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Motivo / antecedentes</label>
+        <textarea id="e-motivo" rows="4" placeholder="Detalle antecedentes previos o el caso específico a analizar..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Acuerdos / compromisos establecidos</label>
+        <textarea id="e-acuerdos" rows="4" placeholder="Escriba los compromisos tomados por cada una de las partes..."></textarea>
+      </div>
+    </div>
+    
+    <div class="form-group" style="margin-top:16px">
+      <label>Observaciones generales</label>
+      <textarea id="e-obs" rows="3" placeholder="Información complementaria, citaciones adicionales o derivaciones..."></textarea>
+    </div>
+    
+    <div class="btn-row" id="ent-btn-row">
+      <button class="btn btn-primary" onclick="guardarEntrevista()">💾 Guardar entrevista</button>
+      <button class="btn btn-success" onclick="previsualizar()">👁 Previsualizar reporte</button>
+      <button class="btn btn-secondary" onclick="limpiarForm()">✖ Cancelar / Limpiar</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════ HISTORIAL ══════════════ -->
+<div class="page" id="pg-historial">
+  <div class="card-header">
+    <div class="card-title">🕘 Historial y Archivo de Entrevistas</div>
+  </div>
+  <div class="card">
+    <div class="search-row">
+      <input id="hist-q" placeholder="Buscar por ID, RUT o Nombre..." oninput="filtrarHistorial()">
+      <select id="hist-estado" onchange="filtrarHistorial()">
+        <option value="">Todos los estados</option>
+        <option value="Abierta">Abierta</option>
+        <option value="En seguimiento">En seguimiento</option>
+        <option value="Cerrada">Cerrada</option>
+        <option value="Derivada">Derivada</option>
+      </select>
+    </div>
+    <div class="tbl-wrap">
+      <table id="tbl-hist">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Fecha</th>
+            <th>RUT</th>
+            <th>Nombre</th>
+            <th>Objetivo</th>
+            <th>Responsable</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════ REPORTE (IMPRESIÓN) ══════════════ -->
+<div class="page" id="pg-reporte">
+  <div class="card-header no-print" style="margin-bottom:16px">
+    <div class="card-title">📄 Vista de Ficha Oficial de Entrevista</div>
+  </div>
+  <div class="btn-row no-print" style="margin-bottom:20px; justify-content: center">
+    <button class="btn btn-primary" onclick="window.print()">🖨 Imprimir Ficha Oficial / Descargar PDF</button>
+    <button class="btn btn-secondary" onclick="goTo('nueva-entrevista')">⬅ Volver a Formulario</button>
+  </div>
+  <div id="card-reporte" class="card">
+    <div id="reporte">
+      <div class="rpt-title">
+        <h2 style="font-size:18px; margin-bottom:6px; font-family:var(--font-title); font-weight:800">Ficha de Entrevista Institucional</h2>
+        <strong style="font-size:12px; color:var(--text-secondary)">Liceo Técnico Profesional Campanario — RBD 3941</strong>
+      </div>
+      
+      <div class="rpt-row">
+        <div class="rpt-cell rpt-label">ID Entrevista</div>
+        <div class="rpt-cell" id="r-id" style="font-weight:700"></div>
+        <div class="rpt-cell rpt-label">Fecha / Hora</div>
+        <div class="rpt-cell" id="r-fecha"></div>
+      </div>
+      <div class="rpt-row">
+        <div class="rpt-cell rpt-label">RUT Entrevistado</div>
+        <div class="rpt-cell" id="r-rut" style="font-family:monospace"></div>
+        <div class="rpt-cell rpt-label">Cargo / Estamento</div>
+        <div class="rpt-cell" id="r-cargo"></div>
+      </div>
+      <div class="rpt-row">
+        <div class="rpt-cell rpt-label">Nombre Completo</div>
+        <div class="rpt-cell" id="r-nombre"></div>
+        <div class="rpt-cell rpt-label">Curso / Función</div>
+        <div class="rpt-cell" id="r-curso"></div>
+      </div>
+      <div class="rpt-row">
+        <div class="rpt-cell rpt-label">Profesor Jefe</div>
+        <div class="rpt-cell" id="r-jefe"></div>
+        <div class="rpt-cell rpt-label">Profesor Asignatura</div>
+        <div class="rpt-cell" id="r-asig"></div>
+      </div>
+      <div class="rpt-row">
+        <div class="rpt-cell rpt-label">Profesor / Especialista PIE</div>
+        <div class="rpt-cell" id="r-pie"></div>
+        <div class="rpt-cell rpt-label">Entrevistador Responsable</div>
+        <div class="rpt-cell" id="r-resp"></div>
+      </div>
+      <div class="rpt-row full">
+        <div class="rpt-cell rpt-label">Objetivo de la entrevista</div>
+        <div class="rpt-cell" id="r-obj" style="min-height:60px; line-height: 1.4"></div>
+      </div>
+      <div class="rpt-row full">
+        <div class="rpt-cell rpt-label">Motivo / Antecedentes</div>
+        <div class="rpt-cell" id="r-mot" style="min-height:60px; line-height: 1.4"></div>
+      </div>
+      <div class="rpt-row full">
+        <div class="rpt-cell rpt-label">Acuerdos y Compromisos</div>
+        <div class="rpt-cell" id="r-acu" style="min-height:60px; line-height: 1.4"></div>
+      </div>
+      <div class="rpt-row">
+        <div class="rpt-cell rpt-label">Fecha Seguimiento</div>
+        <div class="rpt-cell" id="r-seg"></div>
+        <div class="rpt-cell rpt-label">Estado Ficha</div>
+        <div class="rpt-cell" id="r-estado"></div>
+      </div>
+      <div class="rpt-row full">
+        <div class="rpt-cell rpt-label last-row">Observaciones Generales</div>
+        <div class="rpt-cell last-row" id="r-obs" style="min-height:48px; line-height: 1.4"></div>
+      </div>
+      
+      <div class="firma-row">
+        <div>
+          <br><br>
+          ________________________________________<br>
+          <span style="font-size:11px; font-weight:600">Firma Entrevistador/a Responsable</span>
+        </div>
+        <div>
+          <br><br>
+          ________________________________________<br>
+          <span style="font-size:11px; font-weight:600">Firma Entrevistado/a / Apoderado/a</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════ AGREGAR PERSONA ══════════════ -->
+<div class="page" id="pg-agregar-persona">
+  <div class="card-header">
+    <div class="card-title">➕ Agregar Persona a la Base de Datos Local</div>
+  </div>
+  <div class="card">
+    <p style="font-size:13px; color:var(--text-secondary); margin-bottom:20px; line-height: 1.4">Los registros agregados manualmente se guardarán localmente en el almacenamiento persistente del navegador web (`localStorage`) y estarán inmediatamente listos para búsquedas, filtros y citaciones a entrevistas.</p>
+    
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('tab-est',this)">Matricular Estudiante</button>
+      <button class="tab-btn" onclick="switchTab('tab-per',this)">Contratar Personal (Docente/Asistente)</button>
+    </div>
+    
+    <!-- Tab Estudiante -->
+    <div id="tab-est">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>RUT Estudiante *</label>
+          <input id="n-rut" placeholder="Ej: 21.345.678-9">
+        </div>
+        <div class="form-group">
+          <label>Nombres *</label>
+          <input id="n-nombres" placeholder="Nombres">
+        </div>
+        <div class="form-group">
+          <label>Apellido Paterno *</label>
+          <input id="n-pat" placeholder="Apellido paterno">
+        </div>
+        <div class="form-group">
+          <label>Apellido Materno</label>
+          <input id="n-mat" placeholder="Apellido materno">
+        </div>
+        <div class="form-group">
+          <label>Curso de incorporación *</label>
+          <input id="n-curso" placeholder="Ej: 1° Medio A">
+        </div>
+        <div class="form-group">
+          <label>Profesor Jefe</label>
+          <select id="n-jefe">
+            <option value="">Cargando docentes...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Fecha de nacimiento</label>
+          <input type="date" id="n-fnac">
+        </div>
+        <div class="form-group">
+          <label>Estado matrícula</label>
+          <select id="n-estado">
+            <option value="Vigente">Vigente</option>
+            <option value="Retirado">Retirado</option>
+          </select>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="agregarEstudiante()">💾 Guardar estudiante</button>
+      </div>
+    </div>
+    
+    <!-- Tab Personal -->
+    <div id="tab-per" style="display:none">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>RUT *</label>
+          <input id="p-rut" placeholder="Ej: 15.345.678-K">
+        </div>
+        <div class="form-group">
+          <label>Nombres *</label>
+          <input id="p-nombres" placeholder="Nombres">
+        </div>
+        <div class="form-group">
+          <label>Apellido Paterno *</label>
+          <input id="p-pat" placeholder="Apellido paterno">
+        </div>
+        <div class="form-group">
+          <label>Apellido Materno</label>
+          <input id="p-mat" placeholder="Apellido materno">
+        </div>
+        <div class="form-group">
+          <label>Estamento / Cargo</label>
+          <select id="p-cargo">
+            <option value="Docente">Docente</option>
+            <option value="Asistente de la educación">Asistente de la educación</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Función principal o Asignatura</label>
+          <input id="p-func" placeholder="Ej: Educación Matemática o Psicólogo/a">
+        </div>
+        <div class="form-group">
+          <label>Horas contrato semanales</label>
+          <input type="number" id="p-horas" placeholder="Ej: 44">
+        </div>
+        <div class="form-group">
+          <label>Fecha de nacimiento</label>
+          <input type="date" id="p-fnac">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="agregarPersonal()">💾 Guardar personal</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ CONFIGURACIÓN (USUARIOS) ══════════════ -->
+<div class="page" id="pg-configuracion">
+  <div class="welcome-hero" style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%)">
+    <h1>⚙️ Configuración del Sistema y Usuarios</h1>
+    <p>Gestione las cuentas de acceso al sistema, genere contraseñas y asigne perfiles con permisos de Administrador o Entrevistador.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔑 Crear / Editar Credenciales de Acceso</div>
+    <div class="form-grid" style="margin-top:16px">
+      <div class="form-group">
+        <label>Vincular a funcionario disponible</label>
+        <select id="u-personal" onchange="seleccionarFuncionarioUsuario()">
+          <option value="">-- Ingresar datos personalizados (Sin vincular) --</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Nombre Completo</label>
+        <input id="u-nombre" placeholder="Ej: Juan Pérez">
+      </div>
+      <div class="form-group">
+        <label>RUT (Opcional)</label>
+        <input id="u-rut" placeholder="Ej: 12.345.678-9">
+      </div>
+      <div class="form-group">
+        <label>Nombre de Usuario (Login)</label>
+        <input id="u-username" placeholder="Ej: jperez">
+      </div>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <div style="display:flex; gap:8px">
+          <input type="text" id="u-password" placeholder="Clave de acceso" style="flex:1">
+          <button class="btn btn-secondary" onclick="generarClaveUsuario()" type="button" style="padding:0 12px; font-size:12px">⚡ Generar</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Perfil / Rol de Acceso</label>
+        <select id="u-perfil">
+          <option value="Entrevistador">Entrevistador (Solo registro/consulta de entrevistas)</option>
+          <option value="Administrador">Administrador (Acceso total, incluye este panel)</option>
+        </select>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:20px">
+      <button class="btn btn-primary" onclick="guardarUsuario()">💾 Guardar credencial</button>
+      <button class="btn btn-secondary" onclick="limpiarFormUsuario()">✖ Limpiar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">👥 Listado de Usuarios y Cuentas Activas</div>
+    <div class="tbl-wrap" style="margin-top:16px">
+      <table id="tbl-usuarios">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Nombre Completo</th>
+            <th>RUT</th>
+            <th>Perfil / Rol</th>
+            <th>Contraseña</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Cargando cuentas...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- LOOKUP PERSON MODAL -->
+<div class="modal-bg" id="modal-lookup">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">🔍 Selector de Personas</div>
+      <button class="modal-close" onclick="cerrarLookup()">✖</button>
+    </div>
+    <div class="search-row">
+      <input id="l-q" placeholder="Buscar por RUT, nombre o curso..." oninput="filtrarLookup()">
+      <select id="l-filtro" onchange="filtrarLookup()">
+        <option value="">Todos los estamentos</option>
+        <option value="Estudiante">Estudiantes</option>
+        <option value="Docente">Docentes</option>
+        <option value="Asistente de la educación">Asistentes educación</option>
+      </select>
+    </div>
+    <div class="tbl-wrap" style="max-height: 380px; overflow-y: auto;">
+      <table id="tbl-lookup">
+        <thead>
+          <tr>
+            <th>RUT</th>
+            <th>Nombres y Apellidos</th>
+            <th>Estamento</th>
+            <th>Curso / Función</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT PERSON MODAL -->
+<div class="modal-bg" id="modal-editar">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">✏️ Editar Información de Registro</div>
+      <button class="modal-close" onclick="cerrarEditar()">✖</button>
+    </div>
+    <form id="edit-form" onsubmit="event.preventDefault(); guardarCambiosPersona();">
+      <input type="hidden" id="edit-orig-rut">
+      <input type="hidden" id="edit-cargo">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>RUT</label>
+          <input id="edit-rut" readonly style="background: var(--bg-app); cursor: not-allowed;">
+        </div>
+        <div class="form-group">
+          <label>Nombres</label>
+          <input id="edit-nombres" required>
+        </div>
+        <div class="form-group">
+          <label>Apellido Paterno</label>
+          <input id="edit-pat" required>
+        </div>
+        <div class="form-group">
+          <label>Apellido Materno</label>
+          <input id="edit-mat">
+        </div>
+        
+        <!-- Conditional fields (they will be toggled by JS based on cargo) -->
+        <div class="form-group div-edit-est">
+          <label>Curso</label>
+          <input id="edit-curso">
+        </div>
+        <div class="form-group div-edit-est">
+          <label>Profesor Jefe</label>
+          <select id="edit-jefe">
+            <option value="">Cargando docentes...</option>
+          </select>
+        </div>
+        <div class="form-group div-edit-est">
+          <label>Estado Matrícula</label>
+          <select id="edit-estado-mat">
+            <option value="Vigente">Vigente</option>
+            <option value="Retirado">Retirado</option>
+          </select>
+        </div>
+        
+        <div class="form-group div-edit-per">
+          <label>Función / Asignatura</label>
+          <input id="edit-func">
+        </div>
+        <div class="form-group div-edit-per">
+          <label>Horas Contrato</label>
+          <input type="number" id="edit-horas">
+        </div>
+        <div class="form-group div-edit-per">
+          <label>Estado / Idoneidad</label>
+          <input id="edit-idoneidad">
+        </div>
+        
+        <div class="form-group">
+          <label>Fecha de Nacimiento</label>
+          <input type="date" id="edit-fnac">
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:24px">
+        <button type="submit" class="btn btn-primary">💾 Guardar cambios</button>
+        <button type="button" class="btn btn-secondary" onclick="cerrarEditar()">✖ Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+</div>
+
+
+<script src="logic.js" defer></script>
+</body>
+</html>

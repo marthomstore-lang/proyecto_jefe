@@ -1,0 +1,1348 @@
+// ══ STATE & STORAGE (API DRIVEN) ══
+let entrevistas = [];
+let localCont = [];
+let localAdmin = [];
+let editandoEntrevistaId = null;
+
+// Mask RUT helper in real-time
+function formatRut(rutStr) {
+  let value = rutStr.replace(/[^0-9kK]/g, '');
+  if (value.length <= 1) return value;
+  
+  let body = value.slice(0, -1);
+  let dv = value.slice(-1).toUpperCase();
+  
+  let formatted = '';
+  while (body.length > 3) {
+    formatted = '.' + body.slice(-3) + formatted;
+    body = body.slice(0, -3);
+  }
+  formatted = body + formatted;
+  return formatted + '-' + dv;
+}
+
+function handleRutInput(e) {
+  let cursor = e.target.selectionStart;
+  let originalLen = e.target.value.length;
+  let formatted = formatRut(e.target.value);
+  e.target.value = formatted;
+  
+  let newLen = formatted.length;
+  e.target.setSelectionRange(cursor + (newLen - originalLen), cursor + (newLen - originalLen));
+}
+
+function bindRutMasks() {
+  ['e-rut', 'n-rut', 'p-rut', 'edit-rut'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', handleRutInput);
+    }
+  });
+}
+
+function txt(v) { return (v == null ? '' : '' + v).trim(); }
+defEscape = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+function esc(s) { return txt(s).replace(/[&<>"']/g, m => defEscape[m]); }
+
+// ══ SIDEBAR & NAVIGATION ══
+let sidebarOpen = true;
+function toggleSidebar() {
+  const nav = document.getElementById('sidebar');
+  const main = document.getElementById('main-content');
+  sidebarOpen = !sidebarOpen;
+  nav.classList.toggle('collapsed', !sidebarOpen);
+  main.classList.toggle('expanded', !sidebarOpen);
+  
+  if (window.innerWidth <= 1024) {
+    nav.classList.toggle('open', sidebarOpen);
+  }
+}
+
+function goTo(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  
+  const pg = document.getElementById('pg-' + page);
+  if (pg) pg.classList.add('active');
+  
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.getAttribute('onclick') && n.getAttribute('onclick').includes("'" + page + "'")) {
+      n.classList.add('active');
+    }
+  });
+  
+  if (window.innerWidth <= 1024) {
+    document.getElementById('sidebar').classList.remove('open');
+    sidebarOpen = false;
+  }
+  
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  
+  if (page === 'inicio') { buscarGlobal(); loadAllData(); }
+  if (page === 'estudiantes') { initEstFiltros(); filtrarEst(); populateProfesorJefeDropdowns(); }
+  if (page === 'docentes') { initDocFiltros(); filtrarDoc(); }
+  if (page === 'asistentes') { initAsiFiltros(); filtrarAsi(); }
+  if (page === 'historial') { filtrarHistorial(); }
+  if (page === 'administracion') { renderAdmin(); }
+  if (page === 'configuracion') { renderConfiguracion(); }
+}
+
+// ══ TOAST ══
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.innerHTML = `<span>ℹ️</span> ${msg}`;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ══ STATS & SVG GAUGES (SERVER BACKEND) ══
+async function loadAllData() {
+  try {
+    const res = await fetch('/api/stats');
+    const stats = await res.json();
+    
+    document.getElementById('s-est').textContent = stats.totalEstudiantes;
+    document.getElementById('s-doc').textContent = stats.totalDocentes;
+    document.getElementById('s-asi').textContent = stats.totalAsistentes;
+    document.getElementById('s-ent').textContent = stats.totalEntrevistas;
+    document.getElementById('s-vig').textContent = stats.vigentes;
+    document.getElementById('s-ret').textContent = stats.retirados;
+    
+    document.getElementById('cnt-est').textContent = stats.totalEstudiantes;
+    document.getElementById('cnt-doc').textContent = stats.totalDocentes;
+    document.getElementById('cnt-asi').textContent = stats.totalAsistentes;
+    document.getElementById('cnt-ent').textContent = stats.totalEntrevistas;
+
+    // Gauge 1: Matrícula Vigente
+    const pctVig = stats.totalEstudiantes > 0 ? Math.round((stats.vigentes / stats.totalEstudiantes) * 100) : 0;
+    document.getElementById('g-mat-val').textContent = `${pctVig}%`;
+    const offsetVig = 170 - (170 * (pctVig / 100));
+    document.getElementById('g-mat-bar').style.strokeDashoffset = offsetVig;
+
+
+    // Gauge 3: Entrevistas
+    document.getElementById('g-ent-val').textContent = stats.totalEntrevistas;
+    const maxMeta = 100;
+    const pctEnt = Math.min(Math.round((stats.totalEntrevistas / maxMeta) * 100), 100);
+    const offsetEnt = 170 - (170 * (pctEnt / 100));
+    document.getElementById('g-ent-bar').style.strokeDashoffset = offsetEnt;
+    
+    // Rellenar selectores de profesor jefe
+    await populateProfesorJefeDropdowns();
+  } catch (e) {
+    console.error("Error loading server statistics:", e);
+  }
+}
+
+async function populateProfesorJefeDropdowns() {
+  try {
+    console.log("populateProfesorJefeDropdowns: Fetching docentes list...");
+    const res = await fetch('/api/docentes?_=' + Date.now());
+    const docentes = await res.json();
+    console.log("populateProfesorJefeDropdowns: Docentes loaded:", docentes.length);
+    
+    const nJefe = document.getElementById('n-jefe');
+    const editJefe = document.getElementById('edit-jefe');
+    
+    const prevNJefe = nJefe ? nJefe.value : '';
+    const prevEditJefe = editJefe ? editJefe.value : '';
+    
+    let optionsHtml = '<option value="">-- Seleccione Profesor Jefe --</option>';
+    docentes.forEach(d => {
+      const nom = d.Nombres || '';
+      const pat = d['Apellido paterno'] || d['Apellido Paterno'] || '';
+      const mat = d['Apellido materno'] || d['Apellido Materno'] || '';
+      const fullName = `${nom} ${pat} ${mat}`.trim().replace(/\s+/g, ' ');
+      optionsHtml += `<option value="${fullName}">${fullName}</option>`;
+    });
+    
+    if (nJefe) {
+      nJefe.innerHTML = optionsHtml;
+      nJefe.value = prevNJefe;
+      console.log("populateProfesorJefeDropdowns: Populated n-jefe select, value = ", prevNJefe);
+    }
+    if (editJefe) {
+      editJefe.innerHTML = optionsHtml;
+      editJefe.value = prevEditJefe;
+      console.log("populateProfesorJefeDropdowns: Populated edit-jefe select, value = ", prevEditJefe);
+    }
+  } catch (e) {
+    console.error("Error populating Profesor Jefe dropdowns:", e);
+  }
+}
+
+async function updateJefeForCurso(cursoInputId, jefeSelectId) {
+  const curso = document.getElementById(cursoInputId).value.trim();
+  if (!curso) return;
+  try {
+    const res = await fetch(`/api/estudiantes?curso=${encodeURIComponent(curso)}`);
+    const ests = await res.json();
+    const withJefe = ests.find(e => e['Profesor Jefe']);
+    if (withJefe) {
+      const selectEl = document.getElementById(jefeSelectId);
+      if (selectEl) {
+        selectEl.value = withJefe['Profesor Jefe'];
+      }
+    }
+  } catch (e) {
+    console.error("Error auto-detecting Profesor Jefe for curso:", e);
+  }
+}
+
+// ══ GLOBAL SEARCH ══
+async function buscarGlobal() {
+  const q = txt(document.getElementById('g-q').value);
+  const f = document.getElementById('g-filtro').value;
+  try {
+    const res = await fetch(`/api/personas/buscar?q=${encodeURIComponent(q)}&filtro=${encodeURIComponent(f)}`);
+    const rows = await res.json();
+    
+    const tbody = document.querySelector('#tbl-global tbody');
+    tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No se encontraron registros.</td></tr>' :
+    rows.map(p => {
+      const r = p.RUT;
+      const name = [p.Nombres, p['Apellido Paterno'] || p['Apellido paterno'] || '', p['Apellido Materno'] || p['Apellido materno'] || ''].join(' ').trim().replace(/\s+/g,' ');
+      const est = p.Cargo;
+      const desc = p.Curso || p['Función/curso'] || '';
+      return `<tr>
+        <td><span class="rut">${esc(r)}</span></td>
+        <td><strong>${esc(p.Nombres)}</strong></td>
+        <td>${esc(txt(p['Apellido Paterno'] || p['Apellido paterno']) + ' ' + txt(p['Apellido Materno'] || p['Apellido materno']))}</td>
+        <td><span class="badge ${est === 'Estudiante' ? 'badge-azul' : (est === 'Docente' ? 'badge-verde' : 'badge-naranja')}">${esc(est)}</span></td>
+        <td>${esc(desc)}</td>
+        <td>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-sm btn-primary" onclick="entrevistar('${esc(r)}')">📝 Entrevistar</button>
+            <button class="btn btn-sm btn-secondary" onclick="abrirEditar('${esc(r)}')">✏️</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    console.error("Error global search:", e);
+  }
+}
+
+// ══ ESTUDIANTES ══
+let estCursosInit = false;
+async function initEstFiltros() {
+  if (estCursosInit) return;
+  try {
+    const res = await fetch('/api/estudiantes');
+    const all = await res.json();
+    estCursosInit = true;
+    const sel = document.getElementById('est-curso');
+    const cursos = [...new Set(all.map(e => e.Curso).filter(Boolean))].sort();
+    cursos.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      sel.appendChild(o);
+    });
+  } catch (e) {
+    console.error("Error loading student course filters:", e);
+  }
+}
+
+async function filtrarEst() {
+  const q = txt(document.getElementById('est-q').value).toLowerCase();
+  const cur = document.getElementById('est-curso').value;
+  const est = document.getElementById('est-estado').value;
+  
+  try {
+    const res = await fetch(`/api/estudiantes?q=${encodeURIComponent(q)}&curso=${encodeURIComponent(cur)}&estado=${encodeURIComponent(est)}`);
+    const rows = await res.json();
+    
+    document.getElementById('est-count').textContent = `Mostrando ${rows.length} registros`;
+    const tbody = document.querySelector('#tbl-est tbody');
+    tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">No hay registros.</td></tr>' :
+    rows.map(e => `<tr>
+      <td><span class="rut">${esc(e.RUT)}</span></td>
+      <td><strong>${esc(e.Nombres)}</strong></td>
+      <td>${esc(txt(e['Apellido Paterno']) + ' ' + txt(e['Apellido Materno']))}</td>
+      <td>${esc(e.Curso)}</td>
+      <td>${esc(e.Edad || '')}</td>
+      <td><span class="badge ${e['Estado Matrícula'] === 'Vigente' ? 'badge-verde' : 'badge-rojo'}">${esc(e['Estado Matrícula'])}</span></td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-primary" onclick="entrevistar('${esc(e.RUT)}')">📝 Entrevistar</button>
+          <button class="btn btn-sm btn-secondary" onclick="abrirEditar('${esc(e.RUT)}')">✏️ Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="eliminarPersona('${esc(e.RUT)}', 'Estudiante')">✖</button>
+        </div>
+      </td>
+    </tr>`).join('');
+  } catch (e) {
+    console.error("Error loading students list:", e);
+  }
+}
+
+// ══ DOCENTES ══
+let docFuncInit = false;
+async function initDocFiltros() {
+  if (docFuncInit) return;
+  try {
+    const res = await fetch('/api/docentes');
+    const all = await res.json();
+    docFuncInit = true;
+    const sel = document.getElementById('doc-func');
+    const funcs = [...new Set(all.map(d => txt(d['Función/curso'])).filter(Boolean))].sort();
+    funcs.forEach(f => {
+      const o = document.createElement('option');
+      o.value = f; o.textContent = f;
+      sel.appendChild(o);
+    });
+  } catch (e) {
+    console.error("Error loading teacher function filters:", e);
+  }
+}
+
+async function filtrarDoc() {
+  const q = txt(document.getElementById('doc-q').value).toLowerCase();
+  const func = document.getElementById('doc-func').value;
+  try {
+    const res = await fetch(`/api/docentes?q=${encodeURIComponent(q)}&func=${encodeURIComponent(func)}`);
+    const rows = await res.json();
+    
+    document.getElementById('doc-count').textContent = `Mostrando ${rows.length} registros`;
+    const tbody = document.querySelector('#tbl-doc tbody');
+    tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="8" style="text-align:center;color:var(--text-muted)">No hay registros.</td></tr>' :
+    rows.map(d => `<tr>
+      <td><span class="rut">${esc(d.RUT)}</span></td>
+      <td><strong>${esc(d.Nombres)}</strong></td>
+      <td>${esc(txt(d['Apellido paterno']) + ' ' + txt(d['Apellido materno']))}</td>
+      <td>${esc(d['Profesor de asignatura'] || 'General')}</td>
+      <td>${esc(d['Función/curso'] || 'Docente')}</td>
+      <td>${esc(d['Horas contrato'] || 0)} hrs</td>
+      <td><span class="badge ${d['Estado/Idoneidad'] === 'OK' ? 'badge-ok' : 'badge-nook'}">${esc(d['Estado/Idoneidad'] || 'OK')}</span></td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-primary" onclick="entrevistar('${esc(d.RUT)}')">📝 Entrevistar</button>
+          <button class="btn btn-sm btn-secondary" onclick="abrirEditar('${esc(d.RUT)}')">✏️ Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="eliminarPersona('${esc(d.RUT)}', 'Docente')">✖</button>
+        </div>
+      </td>
+    </tr>`).join('');
+  } catch (e) {
+    console.error("Error loading teachers list:", e);
+  }
+}
+
+// ══ ASISTENTES ══
+let asiFuncInit = false;
+async function initAsiFiltros() {
+  if (asiFuncInit) return;
+  try {
+    const res = await fetch('/api/asistentes');
+    const all = await res.json();
+    asiFuncInit = true;
+    const sel = document.getElementById('asi-func');
+    const funcs = [...new Set(all.map(d => txt(d['Función/curso'])).filter(Boolean))].sort();
+    funcs.forEach(f => {
+      const o = document.createElement('option');
+      o.value = f; o.textContent = f;
+      sel.appendChild(o);
+    });
+  } catch(e) {
+    console.error("Error loading assistant function filters:", e);
+  }
+}
+
+async function filtrarAsi() {
+  const q = txt(document.getElementById('asi-q').value).toLowerCase();
+  const func = document.getElementById('asi-func').value;
+  try {
+    const res = await fetch(`/api/asistentes?q=${encodeURIComponent(q)}&func=${encodeURIComponent(func)}`);
+    const rows = await res.json();
+    
+    document.getElementById('asi-count').textContent = `Mostrando ${rows.length} registros`;
+    const tbody = document.querySelector('#tbl-asi tbody');
+    tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">No hay registros.</td></tr>' :
+    rows.map(d => `<tr>
+      <td><span class="rut">${esc(d.RUT)}</span></td>
+      <td><strong>${esc(d.Nombres)}</strong></td>
+      <td>${esc(txt(d['Apellido paterno']) + ' ' + txt(d['Apellido materno']))}</td>
+      <td>${esc(d['Función/curso'] || 'Asistente')}</td>
+      <td>${esc(d['Horas contrato'] || 0)} hrs</td>
+      <td><span class="badge badge-ok">${esc(d['Estado/Idoneidad'] || 'HABILITADO')}</span></td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-primary" onclick="entrevistar('${esc(d.RUT)}')">📝 Entrevistar</button>
+          <button class="btn btn-sm btn-secondary" onclick="abrirEditar('${esc(d.RUT)}')">✏️ Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="eliminarPersona('${esc(d.RUT)}', 'Asistente')">✖</button>
+        </div>
+      </td>
+    </tr>`).join('');
+  } catch (e) {
+    console.error("Error loading assistants list:", e);
+  }
+}
+
+// ══ SELECTOR LOOKUP MODAL ══
+function abrirLookup() {
+  document.getElementById('modal-lookup').classList.add('open');
+  filtrarLookup();
+}
+
+function cerrarLookup() {
+  document.getElementById('modal-lookup').classList.remove('open');
+}
+
+async function filtrarLookup() {
+  const q = txt(document.getElementById('l-q').value).toLowerCase();
+  const f = document.getElementById('l-filtro').value;
+  try {
+    const res = await fetch(`/api/personas/buscar?q=${encodeURIComponent(q)}&filtro=${encodeURIComponent(f)}`);
+    const rows = await res.json();
+    
+    const tbody = document.querySelector('#tbl-lookup tbody');
+    tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">No hay coincidencias.</td></tr>' :
+    rows.map(p => {
+      const rut = p.RUT;
+      const name = [p.Nombres, p['Apellido Paterno'] || p['Apellido paterno'] || '', p['Apellido Materno'] || p['Apellido materno'] || ''].join(' ').trim().replace(/\s+/g,' ');
+      const est = p.Cargo;
+      const c = p.Curso || p['Función/curso'] || '';
+      return `<tr>
+        <td><span class="rut">${esc(rut)}</span></td>
+        <td><strong>${esc(name)}</strong></td>
+        <td><span class="badge ${est === 'Estudiante' ? 'badge-azul' : 'badge-verde'}">${esc(est)}</span></td>
+        <td>${esc(c)}</td>
+        <td><button class="btn btn-sm btn-primary" onclick="seleccionarPersona('${esc(rut)}')">Seleccionar</button></td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    console.error("Error lookup:", e);
+  }
+}
+
+function seleccionarPersona(rut) {
+  document.getElementById('e-rut').value = rut;
+  autocompletarEnt();
+  cerrarLookup();
+  toast('👤 Persona seleccionada');
+}
+
+// ══ EDIT PERSON MODAL ══
+async function abrirEditar(rut) {
+  try {
+    const res = await fetch(`/api/personas/buscar?q=${encodeURIComponent(rut)}`);
+    const results = await res.json();
+    const p = results.find(x => txt(x.RUT).toUpperCase() === txt(rut).toUpperCase());
+    if (!p) return;
+    
+    document.getElementById('edit-orig-rut').value = p.RUT;
+    document.getElementById('edit-rut').value = p.RUT;
+    document.getElementById('edit-nombres').value = p.Nombres;
+    document.getElementById('edit-pat').value = p['Apellido paterno'] || p['Apellido Paterno'] || '';
+    document.getElementById('edit-mat').value = p['Apellido materno'] || p['Apellido Materno'] || '';
+    document.getElementById('edit-fnac').value = p['Fecha de nacimiento'] || p['Fecha de Nacimiento'] || '';
+    document.getElementById('edit-cargo').value = p.Cargo;
+    
+    const estDivs = document.querySelectorAll('.div-edit-est');
+    const perDivs = document.querySelectorAll('.div-edit-per');
+    
+    if (p.Cargo === 'Estudiante') {
+      estDivs.forEach(d => d.style.display = 'flex');
+      perDivs.forEach(d => d.style.display = 'none');
+      document.getElementById('edit-curso').value = p.Curso || '';
+      document.getElementById('edit-jefe').value = p['Profesor Jefe'] || '';
+      document.getElementById('edit-estado-mat').value = p['Estado Matrícula'] || 'Vigente';
+    } else {
+      estDivs.forEach(d => d.style.display = 'none');
+      perDivs.forEach(d => d.style.display = 'flex');
+      document.getElementById('edit-func').value = p['Función/curso'] || '';
+      document.getElementById('edit-horas').value = p['Horas Contrato'] || p['Horas contrato'] || 0;
+      document.getElementById('edit-idoneidad').value = p['Estado/Idoneidad'] || 'OK';
+    }
+    
+    document.getElementById('modal-editar').classList.add('open');
+  } catch (e) {
+    console.error("Error opening edit modal:", e);
+  }
+}
+
+function cerrarEditar() {
+  document.getElementById('modal-editar').classList.remove('open');
+}
+
+async function guardarCambiosPersona() {
+  const origRut = document.getElementById('edit-orig-rut').value;
+  const cargo = document.getElementById('edit-cargo').value;
+  const nom = document.getElementById('edit-nombres').value.trim();
+  const pat = document.getElementById('edit-pat').value.trim();
+  const mat = document.getElementById('edit-mat').value.trim();
+  const fnac = document.getElementById('edit-fnac').value;
+  
+  if (!nom || !pat) {
+    toast('⚠️ Nombre y Apellido Paterno son obligatorios');
+    return;
+  }
+  
+  let url = '';
+  let payload = {};
+  
+  if (cargo === 'Estudiante') {
+    url = '/api/estudiantes';
+    payload = {
+      RUT: origRut,
+      Nombres: nom,
+      "Apellido Paterno": pat,
+      "Apellido Materno": mat,
+      Curso: document.getElementById('edit-curso').value,
+      "Profesor Jefe": document.getElementById('edit-jefe').value,
+      "Fecha de Nacimiento": fnac,
+      "Estado Matrícula": document.getElementById('edit-estado-mat').value,
+      Edad: 0
+    };
+  } else if (cargo === 'Docente') {
+    url = '/api/docentes';
+    payload = {
+      RUT: origRut,
+      Nombres: nom,
+      "Apellido paterno": pat,
+      "Apellido materno": mat,
+      "Función/curso": document.getElementById('edit-func').value,
+      "Horas contrato": Number(document.getElementById('edit-horas').value),
+      "Estado/Idoneidad": document.getElementById('edit-idoneidad').value,
+      "Profesor de asignatura": ""
+    };
+  } else {
+    url = '/api/asistentes';
+    payload = {
+      RUT: origRut,
+      Nombres: nom,
+      "Apellido paterno": pat,
+      "Apellido materno": mat,
+      "Función/curso": document.getElementById('edit-func').value,
+      "Horas contrato": Number(document.getElementById('edit-horas').value),
+      "Estado/Idoneidad": document.getElementById('edit-idoneidad').value
+    };
+  }
+  
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    if (result.success) {
+      toast('✅ Registro actualizado');
+      cerrarEditar();
+      loadAllData();
+      buscarGlobal();
+      if (document.getElementById('pg-estudiantes').classList.contains('active')) filtrarEst();
+      if (document.getElementById('pg-docentes').classList.contains('active')) filtrarDoc();
+      if (document.getElementById('pg-asistentes').classList.contains('active')) filtrarAsi();
+    } else {
+      toast('❌ Error: ' + result.error);
+    }
+  } catch(e) {
+    console.error("Error saving person changes:", e);
+    toast('❌ Error de conexión al servidor');
+  }
+}
+
+async function eliminarPersona(rut, cargo) {
+  if (!confirm(`¿Está seguro de eliminar este registro del sistema?`)) return;
+  let url = '';
+  if (cargo === 'Estudiante') url = `/api/estudiantes?rut=${encodeURIComponent(rut)}`;
+  else if (cargo === 'Docente') url = `/api/docentes?rut=${encodeURIComponent(rut)}`;
+  else url = `/api/asistentes?rut=${encodeURIComponent(rut)}`;
+  
+  try {
+    const res = await fetch(url, { method: 'DELETE' });
+    const result = await res.json();
+    if (result.success) {
+      toast('🗑️ Registro eliminado');
+      loadAllData();
+      buscarGlobal();
+      if (cargo === 'Estudiante') filtrarEst();
+      else if (cargo === 'Docente') filtrarDoc();
+      else filtrarAsi();
+    } else {
+      toast('❌ Error: ' + result.error);
+    }
+  } catch(e) {
+    console.error("Error deleting person:", e);
+    toast('❌ Error de conexión al servidor');
+  }
+}
+
+
+
+// ══ ADMINISTRACIÓN ══
+async function renderAdmin() {
+  try {
+    const res = await fetch('/api/administracion');
+    localAdmin = await res.json();
+    
+    const tbody = document.querySelector('#tbl-admin tbody');
+    tbody.innerHTML = localAdmin.length === 0 ? '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">No hay documentos registrados localmente.</td></tr>' :
+    localAdmin.map((a, i) => `<tr>
+      <td>${esc(a.fecha)}</td>
+      <td><span class="badge badge-azul">${esc(a.tipo)}</span></td>
+      <td><strong>${esc(a.titulo)}</strong></td>
+      <td>${esc(a.resp)}</td>
+      <td><span class="badge ${a.estado === 'Finalizado' ? 'badge-verde' : (a.estado === 'En proceso' ? 'badge-naranja' : 'badge-rojo')}">${esc(a.estado)}</span></td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.descripcion)}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="eliminarAdmin(${a.id})">🗑️</button></td>
+    </tr>`).join('');
+  } catch(e) {
+    console.error("Error loading administration docs:", e);
+  }
+}
+
+async function guardarAdmin() {
+  const fecha = document.getElementById('a-fecha').value;
+  const tipo = document.getElementById('a-tipo').value;
+  const titulo = document.getElementById('a-titulo').value.trim();
+  const resp = document.getElementById('a-resp').value.trim();
+  const estado = document.getElementById('a-estado').value;
+  const desc = document.getElementById('a-desc').value.trim();
+  
+  if (!fecha || !titulo || !resp) {
+    toast('⚠️ Fecha, título y responsable son obligatorios');
+    return;
+  }
+  
+  const payload = { fecha, tipo, titulo, resp, estado, desc };
+  try {
+    const res = await fetch('/api/administracion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    if (result.success) {
+      toast('✅ Documento guardado');
+      limpiarAdmin();
+      renderAdmin();
+    } else {
+      toast('❌ Error: ' + result.error);
+    }
+  } catch(e) {
+    console.error("Error saving admin doc:", e);
+    toast('❌ Error de conexión al servidor');
+  }
+}
+
+async function eliminarAdmin(id) {
+  if (!confirm('¿Eliminar este documento administrativo?')) return;
+  try {
+    const res = await fetch(`/api/administracion?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const result = await res.json();
+    if (result.success) {
+      toast('🗑️ Documento eliminado');
+      renderAdmin();
+    } else {
+      toast('❌ Error: ' + result.error);
+    }
+  } catch(e) {
+    console.error("Error deleting admin doc:", e);
+  }
+}
+
+function limpiarAdmin() {
+  document.getElementById('a-titulo').value = '';
+  document.getElementById('a-resp').value = '';
+  document.getElementById('a-desc').value = '';
+  document.getElementById('a-fecha').value = new Date().toISOString().slice(0, 10);
+}
+
+// ══ ENTREVISTAS ══
+async function entrevistar(rut) {
+  document.getElementById('e-rut').value = rut;
+  await autocompletarEnt();
+  goTo('nueva-entrevista');
+}
+
+async function autocompletarEnt() {
+  const rut = document.getElementById('e-rut').value.trim();
+  if (!rut) return;
+  try {
+    const res = await fetch(`/api/personas/buscar?q=${encodeURIComponent(rut)}`);
+    const results = await res.json();
+    const p = results.find(x => txt(x.RUT).toUpperCase() === txt(rut).toUpperCase());
+    if (!p) return;
+    
+    document.getElementById('e-nombre').value = [p.Nombres, p['Apellido Paterno'] || p['Apellido paterno'] || '', p['Apellido Materno'] || p['Apellido materno'] || ''].join(' ').trim().replace(/\s+/g, ' ');
+    document.getElementById('e-cargo').value = txt(p.Cargo);
+    document.getElementById('e-curso').value = txt(p.Curso || p['Función/curso'] || '');
+    document.getElementById('e-jefe').value = txt(p['Profesor Jefe'] || p['Profesor jefe (curso)'] || 'No aplica');
+    document.getElementById('e-asig').value = txt(p['Asignatura'] || p['Profesor de Asignatura'] || 'No aplica');
+    document.getElementById('e-pie').value = txt(p['Profesor PIE'] || 'No aplica');
+  } catch(e) {
+    console.error("Error autocompleting:", e);
+  }
+}
+
+async function guardarEntrevista() {
+  const rut = document.getElementById('e-rut').value.trim();
+  if (!rut) {
+    toast('⚠️ Ingrese el RUT del entrevistado');
+    return;
+  }
+  
+  const payload = {
+    id: editandoEntrevistaId,
+    rut,
+    nombre: document.getElementById('e-nombre').value,
+    cargo: document.getElementById('e-cargo').value,
+    curso: document.getElementById('e-curso').value,
+    jefe: document.getElementById('e-jefe').value,
+    asig: document.getElementById('e-asig').value,
+    pie: document.getElementById('e-pie').value,
+    fecha: document.getElementById('e-fecha').value,
+    hora: document.getElementById('e-hora').value,
+    resp: document.getElementById('e-resp').value,
+    estado: document.getElementById('e-estado').value,
+    seguimiento: document.getElementById('e-seguimiento').value,
+    objetivo: document.getElementById('e-objetivo').value,
+    motivo: document.getElementById('e-motivo').value,
+    acuerdos: document.getElementById('e-acuerdos').value,
+    obs: document.getElementById('e-obs').value
+  };
+  
+  try {
+    const res = await fetch('/api/entrevistas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    if (result.success) {
+      if (editandoEntrevistaId) {
+        toast('✅ Entrevista actualizada: ' + editandoEntrevistaId);
+        editandoEntrevistaId = null;
+        const btnSave = document.querySelector('#ent-btn-row button:first-child');
+        if (btnSave) btnSave.innerHTML = '💾 Guardar entrevista';
+      } else {
+        toast('✅ Entrevista guardada: ' + result.id);
+      }
+      loadAllData();
+      limpiarForm();
+      goTo('historial');
+    } else {
+      toast('❌ Error: ' + result.error);
+    }
+  } catch(e) {
+    console.error("Error saving interview:", e);
+    toast('❌ Error de conexión al servidor');
+  }
+}
+
+function previsualizar() {
+  const ent = {
+    id: editandoEntrevistaId || '(vista previa)',
+    rut: document.getElementById('e-rut').value,
+    nombre: document.getElementById('e-nombre').value,
+    cargo: document.getElementById('e-cargo').value,
+    curso: document.getElementById('e-curso').value,
+    jefe: document.getElementById('e-jefe').value,
+    asig: document.getElementById('e-asig').value,
+    pie: document.getElementById('e-pie').value,
+    fecha: document.getElementById('e-fecha').value,
+    hora: document.getElementById('e-hora').value,
+    resp: document.getElementById('e-resp').value,
+    estado: document.getElementById('e-estado').value,
+    seguimiento: document.getElementById('e-seguimiento').value,
+    objetivo: document.getElementById('e-objetivo').value,
+    motivo: document.getElementById('e-motivo').value,
+    acuerdos: document.getElementById('e-acuerdos').value,
+    obs: document.getElementById('e-obs').value
+  };
+  llenarReporte(ent);
+  goTo('reporte');
+}
+
+function limpiarForm() {
+  ['e-rut', 'e-nombre', 'e-cargo', 'e-curso', 'e-jefe', 'e-asig', 'e-pie', 'e-resp', 'e-objetivo', 'e-motivo', 'e-acuerdos', 'e-obs'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('e-estado').value = 'Abierta';
+  document.getElementById('e-fecha').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('e-hora').value = new Date().toTimeString().slice(0, 5);
+  document.getElementById('e-seguimiento').value = '';
+  
+  editandoEntrevistaId = null;
+  const btnSave = document.querySelector('#ent-btn-row button:first-child');
+  if (btnSave) btnSave.innerHTML = '💾 Guardar entrevista';
+}
+
+function llenarReporte(e) {
+  document.getElementById('r-id').textContent = e.id || '';
+  document.getElementById('r-fecha').textContent = txt(e.fecha) + ' ' + txt(e.hora);
+  document.getElementById('r-rut').textContent = e.rut || '';
+  document.getElementById('r-cargo').textContent = e.cargo || '';
+  document.getElementById('r-nombre').textContent = e.nombre || '';
+  document.getElementById('r-curso').textContent = e.curso || '';
+  document.getElementById('r-jefe').textContent = e.jefe || '';
+  document.getElementById('r-asig').textContent = e.asig || '';
+  document.getElementById('r-pie').textContent = e.pie || '';
+  document.getElementById('r-resp').textContent = e.resp || '';
+  document.getElementById('r-obj').textContent = e.objetivo || '';
+  document.getElementById('r-mot').textContent = e.motivo || '';
+  document.getElementById('r-acu').textContent = e.acuerdos || '';
+  document.getElementById('r-seg').textContent = e.seguimiento || 'No fijado';
+  document.getElementById('r-estado').textContent = e.estado || '';
+  document.getElementById('r-obs').textContent = e.obs || '';
+}
+
+// ══ HISTORIAL ══
+async function filtrarHistorial() {
+  const q = txt(document.getElementById('hist-q').value).toLowerCase();
+  const est = document.getElementById('hist-estado').value;
+  try {
+    const res = await fetch(`/api/entrevistas?q=${encodeURIComponent(q)}&estado=${encodeURIComponent(est)}`);
+    entrevistas = await res.json();
+    
+    const tbody = document.querySelector('#tbl-hist tbody');
+    tbody.innerHTML = entrevistas.length === 0 ? '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">No hay entrevistas guardadas.</td></tr>' :
+    entrevistas.map(e => `<tr>
+      <td><span class="rut">${esc(e.id)}</span></td>
+      <td>${esc(e.fecha)}</td>
+      <td><span class="rut">${esc(e.rut)}</span></td>
+      <td><strong>${esc(e.nombre)}</strong></td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.objetivo)}</td>
+      <td>${esc(e.resp)}</td>
+      <td><span class="badge ${estadoBadge(e.estado)}">${esc(e.estado)}</span></td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')">📄 Ver</button>
+          <button class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditar('${esc(e.id)}')">✏️</button>
+          <button class="btn btn-sm btn-danger" onclick="eliminarEnt('${esc(e.id)}')">✖</button>
+        </div>
+      </td>
+    </tr>`).join('');
+  } catch(e) {
+    console.error("Error loading interview history:", e);
+  }
+}
+
+function estadoBadge(e) {
+  if (e === 'Abierta') return 'badge-azul';
+  if (e === 'En seguimiento') return 'badge-naranja';
+  if (e === 'Cerrada') return 'badge-verde';
+  if (e === 'Derivada') return 'badge-rojo';
+  return 'badge-gris';
+}
+
+function verReporte(id) {
+  const e = entrevistas.find(x => x.id === id);
+  if (e) {
+    llenarReporte(e);
+    goTo('reporte');
+  }
+}
+
+function cargarEntrevistaParaEditar(id) {
+  const e = entrevistas.find(x => x.id === id);
+  if (!e) return;
+  
+  editandoEntrevistaId = id;
+  goTo('nueva-entrevista');
+  
+  document.getElementById('e-rut').value = e.rut;
+  document.getElementById('e-nombre').value = e.nombre;
+  document.getElementById('e-cargo').value = e.cargo;
+  document.getElementById('e-curso').value = e.curso;
+  document.getElementById('e-jefe').value = e.jefe;
+  document.getElementById('e-asig').value = e.asig;
+  document.getElementById('e-pie').value = e.pie;
+  document.getElementById('e-fecha').value = e.fecha;
+  document.getElementById('e-hora').value = e.hora;
+  document.getElementById('e-resp').value = e.resp;
+  document.getElementById('e-estado').value = e.estado;
+  document.getElementById('e-seguimiento').value = e.seguimiento || '';
+  document.getElementById('e-objetivo').value = e.objetivo;
+  document.getElementById('e-motivo').value = e.motivo;
+  document.getElementById('e-acuerdos').value = e.acuerdos;
+  document.getElementById('e-obs').value = e.obs;
+  
+  const btnSave = document.querySelector('#ent-btn-row button:first-child');
+  if (btnSave) btnSave.innerHTML = '💾 Actualizar entrevista';
+  
+  toast(`✏️ Cargada entrevista ${id} para edición`);
+}
+
+async function eliminarEnt(id) {
+  if (!confirm('¿Eliminar entrevista ' + id + '?')) return;
+  try {
+    const res = await fetch(`/api/entrevistas?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const result = await res.json();
+    if (result.success) {
+      toast('🗑️ Entrevista eliminada');
+      loadAllData();
+      filtrarHistorial();
+    } else {
+      toast('❌ Error: ' + result.error);
+    }
+  } catch(e) {
+    console.error("Error deleting interview:", e);
+    toast('❌ Error al eliminar entrevista');
+  }
+}
+
+// ══ AGREGAR PERSONA ══
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-est').style.display = id === 'tab-est' ? 'block' : 'none';
+  document.getElementById('tab-per').style.display = id === 'tab-per' ? 'block' : 'none';
+}
+
+async function agregarEstudiante() {
+  const rut = document.getElementById('n-rut').value.trim();
+  const nom = document.getElementById('n-nombres').value.trim();
+  const pat = document.getElementById('n-pat').value.trim();
+  const mat = document.getElementById('n-mat').value.trim();
+  const curso = document.getElementById('n-curso').value.trim();
+  
+  if (!rut || !nom || !pat || !curso) {
+    toast('⚠️ RUT, Nombres, Apellido Paterno y Curso son obligatorios');
+    return;
+  }
+  
+  const payload = {
+    RUT: rut, Nombres: nom, 'Apellido Paterno': pat, 'Apellido Materno': mat,
+    Cargo: 'Estudiante', Curso: curso, 'Profesor Jefe': document.getElementById('n-jefe').value.trim(),
+    'Fecha de Nacimiento': document.getElementById('n-fnac').value,
+    'Estado Matrícula': document.getElementById('n-estado').value, Edad: 0
+  };
+  
+  try {
+    const res = await fetch('/api/estudiantes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    if (result.success) {
+      toast('✅ Estudiante agregado');
+      ['n-rut', 'n-nombres', 'n-pat', 'n-mat', 'n-curso', 'n-jefe', 'n-fnac'].forEach(id => {
+        document.getElementById(id).value = '';
+      });
+      loadAllData();
+    } else {
+      toast('❌ Error: ' + result.error);
+    }
+  } catch(e) {
+    console.error("Error adding student:", e);
+    toast('❌ Error de conexión al de servidor');
+  }
+}
+
+async function agregarPersonal() {
+  const rut = document.getElementById('p-rut').value.trim();
+  const nom = document.getElementById('p-nombres').value.trim();
+  const pat = document.getElementById('p-pat').value.trim();
+  const mat = document.getElementById('p-mat').value.trim();
+  const cargo = document.getElementById('p-cargo').value;
+  
+  if (!rut || !nom || !pat) {
+    toast('⚠️ RUT, Nombres y Apellido Paterno son obligatorios');
+    return;
+  }
+  
+  const payload = {
+    RUT: rut, Nombres: nom, 'Apellido paterno': pat, 'Apellido materno': mat,
+    Cargo: cargo, 'Función/curso': document.getElementById('p-func').value.trim(),
+    'Horas contrato': Number(document.getElementById('p-horas').value || 0),
+    'Fecha de nacimiento': document.getElementById('p-fnac').value,
+    'Estado/Idoneidad': 'OK'
+  };
+  
+  const url = cargo === 'Docente' ? '/api/docentes' : '/api/asistentes';
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    if (result.success) {
+      toast('✅ Funcionario agregado');
+      ['p-rut', 'p-nombres', 'p-pat', 'p-mat', 'p-func', 'p-horas', 'p-fnac'].forEach(id => {
+        document.getElementById(id).value = '';
+      });
+      loadAllData();
+    } else {
+      toast('❌ Error: ' + result.error);
+    }
+  } catch(e) {
+    console.error("Error adding personnel:", e);
+    toast('❌ Error de conexión al servidor');
+  }
+}
+
+// ══ EXPORT / BACKUP ══
+async function exportarDatos() {
+  try {
+    const entsRes = await fetch('/api/entrevistas');
+    const estsRes = await fetch('/api/estudiantes');
+    const docsRes = await fetch('/api/docentes');
+    const asisRes = await fetch('/api/asistentes');
+    const admRes = await fetch('/api/administracion');
+    
+    const data = {
+      entrevistas: await entsRes.json(),
+      estudiantes: await estsRes.json(),
+      docentes: await docsRes.json(),
+      asistentes: await asisRes.json(),
+      administracion: await admRes.json(),
+      exportado: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'respaldo_sqlite_campanario_' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    toast('💾 Datos exportados correctamente');
+  } catch(e) {
+    console.error("Error exporting data:", e);
+    toast('❌ Error al exportar base de datos');
+  }
+}
+
+// ══ LOGIN / LOGOUT ══
+async function login() {
+  const u = (document.getElementById('login-user') || {}).value || '';
+  const p = (document.getElementById('login-pass') || {}).value || '';
+  
+  if (!u.trim() || !p) {
+    toast('⚠️ Ingrese usuario y contraseña');
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u.trim().toLowerCase(), password: p })
+    });
+    const data = await res.json();
+    if (data.success) {
+      document.body.classList.remove('login-active');
+      const loginScreen = document.getElementById('login-screen');
+      const appShell = document.getElementById('app-shell');
+      if (loginScreen) {
+        loginScreen.style.display = 'none';
+        loginScreen.style.visibility = 'hidden';
+        loginScreen.style.pointerEvents = 'none';
+      }
+      if (appShell) {
+        appShell.style.display = 'block';
+      }
+      try {
+        sessionStorage.setItem('campanario_login', '1');
+        sessionStorage.setItem('campanario_user', data.username);
+        sessionStorage.setItem('campanario_perfil', data.perfil);
+        sessionStorage.setItem('campanario_nombre', data.nombre);
+      } catch (e) {}
+      
+      aplicarPermisos(data.perfil);
+      
+      setTimeout(() => {
+        loadAllData();
+        buscarGlobal();
+        bindRutMasks();
+      }, 100);
+    } else {
+      const err = document.getElementById('login-error');
+      if (err) {
+        err.textContent = data.error || 'Usuario o contraseña incorrectos.';
+        err.style.display = 'block';
+      }
+    }
+  } catch (e) {
+    console.error("Error login:", e);
+    toast('❌ Error de conexión al servidor');
+  }
+}
+
+function logout() {
+  try {
+    sessionStorage.removeItem('campanario_login');
+    sessionStorage.removeItem('campanario_user');
+    sessionStorage.removeItem('campanario_perfil');
+    sessionStorage.removeItem('campanario_nombre');
+  } catch (e) {}
+  document.body.classList.add('login-active');
+  const loginScreen = document.getElementById('login-screen');
+  const appShell = document.getElementById('app-shell');
+  if (loginScreen) {
+    loginScreen.style.display = 'flex';
+    loginScreen.style.visibility = 'visible';
+    loginScreen.style.pointerEvents = 'auto';
+  }
+  if (appShell) {
+    appShell.style.display = 'none';
+  }
+}
+
+function togglePass() {
+  const p = document.getElementById('login-pass');
+  if (p) {
+    p.type = p.type === 'password' ? 'text' : 'password';
+  }
+}
+
+function aplicarPermisos(perfil) {
+  const navConfig = document.getElementById('nav-config');
+  if (navConfig) {
+    if (perfil === 'Administrador') {
+      navConfig.style.display = 'flex';
+    } else {
+      navConfig.style.display = 'none';
+    }
+  }
+  
+  const userBadgeSpan = document.querySelector('.user-info .user-badge span');
+  if (userBadgeSpan) {
+    userBadgeSpan.textContent = perfil || 'Entrevistador';
+  }
+  const userAvatar = document.querySelector('.user-info .user-avatar');
+  if (userAvatar && sessionStorage.getItem('campanario_nombre')) {
+    const nom = sessionStorage.getItem('campanario_nombre');
+    userAvatar.textContent = nom.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
+  }
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && document.body.classList.contains('login-active')) {
+    login();
+  }
+});
+
+// ══ GESTIÓN DE CONFIGURACIÓN (USUARIOS CRUD) ══
+let listaPersonalGlobal = [];
+async function renderConfiguracion() {
+  try {
+    const resUsers = await fetch('/api/usuarios');
+    const usuarios = await resUsers.json();
+    
+    const tbody = document.querySelector('#tbl-usuarios tbody');
+    tbody.innerHTML = usuarios.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No hay credenciales activas creadas.</td></tr>' :
+    usuarios.map(u => `<tr>
+      <td><strong style="color:var(--primary)">${esc(u.username)}</strong></td>
+      <td>${esc(u.nombre)}</td>
+      <td><span class="rut">${esc(u.rut || 'No aplica')}</span></td>
+      <td><span class="badge ${u.perfil === 'Administrador' ? 'badge-azul' : 'badge-verde'}">${esc(u.perfil)}</span></td>
+      <td>
+        <div style="display:flex; align-items:center; gap:8px">
+          <input type="password" value="${esc(u.password)}" readonly class="pwd-field" id="pwd-${esc(u.username)}" style="background:transparent; border:0; color:var(--text-primary); font-family:monospace; font-size:13px; width:70px">
+          <button class="btn btn-sm" onclick="togglePwdVisibility('${esc(u.username)}')" type="button" style="padding:2px 6px">👁️</button>
+        </div>
+      </td>
+      <td>
+        <div style="display:flex; gap:4px">
+          <button class="btn btn-sm btn-primary" onclick="cargarUsuarioParaEditar('${esc(u.username)}')">✏️</button>
+          <button class="btn btn-sm btn-danger" onclick="eliminarUsuario('${esc(u.username)}')">🗑️</button>
+        </div>
+      </td>
+    </tr>`).join('');
+    
+    const resDocs = await fetch('/api/docentes');
+    const docs = await resDocs.json();
+    const resAsis = await fetch('/api/asistentes');
+    const asis = await resAsis.json();
+    
+    listaPersonalGlobal = [];
+    docs.forEach(d => {
+      listaPersonalGlobal.push({
+        rut: d.RUT,
+        nombre: `${d.Nombres} ${d['Apellido paterno'] || d['Apellido Paterno'] || ''} ${d['Apellido materno'] || d['Apellido Materno'] || ''}`.trim().replace(/\s+/g, ' '),
+        cargo: 'Docente'
+      });
+    });
+    asis.forEach(a => {
+      listaPersonalGlobal.push({
+        rut: a.RUT,
+        nombre: `${a.Nombres} ${a['Apellido paterno'] || a['Apellido Paterno'] || ''} ${a['Apellido materno'] || a['Apellido Materno'] || ''}`.trim().replace(/\s+/g, ' '),
+        cargo: 'Asistente'
+      });
+    });
+    
+    const select = document.getElementById('u-personal');
+    const valAnterior = select.value;
+    select.innerHTML = '<option value="">-- Ingresar datos personalizados (Sin vincular) --</option>' +
+      listaPersonalGlobal.map(p => `<option value="${esc(p.rut)}">${esc(p.nombre)} (${esc(p.cargo)})</option>`).join('');
+    select.value = valAnterior;
+  } catch (e) {
+    console.error("Error renderConfiguracion:", e);
+  }
+}
+
+function togglePwdVisibility(username) {
+  const input = document.getElementById('pwd-' + username);
+  if (input) {
+    input.type = input.type === 'password' ? 'text' : 'password';
+  }
+}
+
+function seleccionarFuncionarioUsuario() {
+  const rutSelected = document.getElementById('u-personal').value;
+  if (!rutSelected) {
+    document.getElementById('u-nombre').value = '';
+    document.getElementById('u-rut').value = '';
+    document.getElementById('u-nombre').readOnly = false;
+    document.getElementById('u-rut').readOnly = false;
+    return;
+  }
+  const p = listaPersonalGlobal.find(x => x.rut === rutSelected);
+  if (p) {
+    document.getElementById('u-nombre').value = p.nombre;
+    document.getElementById('u-rut').value = p.rut;
+    document.getElementById('u-nombre').readOnly = true;
+    document.getElementById('u-rut').readOnly = true;
+  }
+}
+
+function generarClaveUsuario() {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let password = '';
+  for (let i = 0; i < 8; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  document.getElementById('u-password').value = password;
+  toast('⚡ Contraseña aleatoria generada');
+}
+
+async function guardarUsuario() {
+  const username = document.getElementById('u-username').value.trim().toLowerCase();
+  const nombre = document.getElementById('u-nombre').value.trim();
+  const rut = document.getElementById('u-rut').value.trim();
+  const password = document.getElementById('u-password').value;
+  const perfil = document.getElementById('u-perfil').value;
+  
+  if (!username || !nombre || !password) {
+    toast('⚠️ Complete usuario, nombre y contraseña');
+    return;
+  }
+  
+  const payload = { username, nombre, rut, password, perfil };
+  try {
+    const res = await fetch('/api/usuarios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    if (result.success) {
+      toast('✅ Credencial guardada correctamente');
+      limpiarFormUsuario();
+      renderConfiguracion();
+    } else {
+      toast('❌ Error: ' + result.error);
+    }
+  } catch (e) {
+    console.error("Error guardarUsuario:", e);
+    toast('❌ Error de conexión al servidor');
+  }
+}
+
+async function eliminarUsuario(username) {
+  if (username === 'admin') {
+    toast('⚠️ No se puede eliminar al Administrador Principal');
+    return;
+  }
+  if (sessionStorage.getItem('campanario_user') === username) {
+    toast('⚠️ No puedes eliminar tu propio usuario actual');
+    return;
+  }
+  if (!confirm(`¿Está seguro de eliminar el acceso para el usuario "${username}"?`)) return;
+  
+  try {
+    const res = await fetch(`/api/usuarios?username=${encodeURIComponent(username)}`, { method: 'DELETE' });
+    const result = await res.json();
+    if (result.success) {
+      toast('🗑️ Usuario eliminado');
+      renderConfiguracion();
+    } else {
+      toast('❌ Error: ' + result.error);
+    }
+  } catch (e) {
+    console.error("Error eliminarUsuario:", e);
+  }
+}
+
+async function cargarUsuarioParaEditar(username) {
+  try {
+    const res = await fetch('/api/usuarios');
+    const list = await res.json();
+    const u = list.find(x => x.username === username);
+    if (u) {
+      document.getElementById('u-username').value = u.username;
+      document.getElementById('u-username').readOnly = true;
+      document.getElementById('u-nombre').value = u.nombre;
+      document.getElementById('u-rut').value = u.rut || '';
+      document.getElementById('u-password').value = u.password;
+      document.getElementById('u-perfil').value = u.perfil;
+      document.getElementById('u-personal').value = u.rut || '';
+      
+      if (u.rut) {
+        document.getElementById('u-nombre').readOnly = true;
+        document.getElementById('u-rut').readOnly = true;
+      } else {
+        document.getElementById('u-nombre').readOnly = false;
+        document.getElementById('u-rut').readOnly = false;
+      }
+      
+      toast(`✏️ Cargado usuario "${username}" para edición`);
+    }
+  } catch (e) {
+    console.error("Error cargarUsuarioParaEditar:", e);
+  }
+}
+
+function limpiarFormUsuario() {
+  document.getElementById('u-username').value = '';
+  document.getElementById('u-username').readOnly = false;
+  document.getElementById('u-nombre').value = '';
+  document.getElementById('u-nombre').readOnly = false;
+  document.getElementById('u-rut').value = '';
+  document.getElementById('u-rut').readOnly = false;
+  document.getElementById('u-password').value = '';
+  document.getElementById('u-perfil').value = 'Entrevistador';
+  document.getElementById('u-personal').value = '';
+}
+
+// Auto-login restoration
+try {
+  if (sessionStorage.getItem('campanario_login') === '1') {
+    document.body.classList.remove('login-active');
+    const loginScreen = document.getElementById('login-screen');
+    const appShell = document.getElementById('app-shell');
+    if (loginScreen) {
+      loginScreen.style.display = 'none';
+      loginScreen.style.visibility = 'hidden';
+      loginScreen.style.pointerEvents = 'none';
+    }
+    if (appShell) {
+      appShell.style.display = 'block';
+    }
+    aplicarPermisos(sessionStorage.getItem('campanario_perfil'));
+  }
+} catch (e) {}
+
+// Initializations
+document.getElementById('e-fecha').value = new Date().toISOString().slice(0, 10);
+document.getElementById('e-hora').value = new Date().toTimeString().slice(0, 5);
+document.getElementById('a-fecha').value = new Date().toISOString().slice(0, 10);
+
+// Bind blur events for course homeroom teacher auto-detection
+const nCursoEl = document.getElementById('n-curso');
+if (nCursoEl) {
+  nCursoEl.addEventListener('blur', () => updateJefeForCurso('n-curso', 'n-jefe'));
+}
+const editCursoEl = document.getElementById('edit-curso');
+if (editCursoEl) {
+  editCursoEl.addEventListener('blur', () => updateJefeForCurso('edit-curso', 'edit-jefe'));
+}
+
+setTimeout(() => {
+  loadAllData();
+  buscarGlobal();
+  bindRutMasks();
+}, 200);

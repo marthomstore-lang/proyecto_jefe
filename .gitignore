@@ -1,0 +1,20 @@
+# Entorno y credenciales
+.env
+
+# Base de datos SQLite local
+campanario.db
+
+# Copias de seguridad y archivos temporales
+index.html.bak
+temp_extractor.js
+*.log
+
+# Python cache y compilaciones
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+env/
