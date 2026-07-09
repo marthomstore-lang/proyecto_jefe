@@ -1536,6 +1536,27 @@ function llenarReporte(e) {
 }
 
 // ══ HISTORIAL ══
+function toggleGroupRow(groupId) {
+  const rows = document.querySelectorAll('.' + groupId);
+  const arrow = document.getElementById('arrow-' + groupId);
+  
+  rows.forEach(row => {
+    if (row.style.display === 'none') {
+      row.style.display = 'table-row';
+    } else {
+      row.style.display = 'none';
+    }
+  });
+  
+  if (arrow) {
+    if (arrow.style.transform === 'rotate(90deg)') {
+      arrow.style.transform = 'rotate(0deg)';
+    } else {
+      arrow.style.transform = 'rotate(90deg)';
+    }
+  }
+}
+
 async function filtrarHistorial() {
   const q = txt(document.getElementById('hist-q').value).toLowerCase();
   const est = document.getElementById('hist-estado').value;
@@ -1544,22 +1565,88 @@ async function filtrarHistorial() {
     entrevistas = await res.json();
     
     const tbody = document.querySelector('#tbl-hist tbody');
-    tbody.innerHTML = entrevistas.length === 0 ? '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">No hay entrevistas guardadas.</td></tr>' :
-    entrevistas.map(e => `<tr>
-      <td><span class="rut">${esc(e.id)}</span></td>
-      <td>${esc(e.fecha)}</td>
-      <td><span class="rut">${esc(e.rut)}</span></td>
-      <td><strong>${esc(e.nombre)}</strong></td>
-      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.objetivo)}</td>
-      <td>${esc(e.resp)}</td>
-      <td><span class="badge ${estadoBadge(e.estado)}">${esc(e.estado)}</span></td>
-      <td>
-        <div style="display:flex;gap:4px">
-          <button class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')">📄 Ver</button>
-          <button class="btn btn-sm btn-danger" onclick="eliminarEnt('${esc(e.id)}')">✖</button>
-        </div>
-      </td>
-    </tr>`).join('');
+    if (entrevistas.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">No hay entrevistas guardadas.</td></tr>';
+      return;
+    }
+    
+    // Group interviews by RUT
+    const grouped = {};
+    entrevistas.forEach(e => {
+      const key = txt(e.rut).toUpperCase();
+      if (!grouped[key]) {
+        grouped[key] = {
+          rut: e.rut,
+          nombre: e.nombre,
+          cargo: e.cargo,
+          curso: e.curso,
+          items: []
+        };
+      }
+      grouped[key].items.push(e);
+    });
+    
+    const isSearchActive = !!q;
+    let html = '';
+    
+    Object.values(grouped).forEach((group, index) => {
+      const total = group.items.length;
+      const cleanRut = group.rut.replace(/[^a-zA-Z0-9]/g, '');
+      const uniqueId = `group-${cleanRut}-${index}`;
+      
+      // Order items by date/id descending (latest first)
+      group.items.sort((a, b) => b.id.localeCompare(a.id));
+      
+      // Child Rows (visible if search is active)
+      const displayStyle = isSearchActive ? 'table-row' : 'none';
+      const arrowTransform = isSearchActive ? 'rotate(90deg)' : 'rotate(0deg)';
+      
+      // Parent Row
+      html += `
+        <tr class="group-header" onclick="toggleGroupRow('${uniqueId}')" style="background-color: var(--bg-hover, #f8fafc); cursor: pointer; font-weight: 600;">
+          <td style="width: 40px; text-align: center;">
+            <span class="toggle-arrow" id="arrow-${uniqueId}" style="transition: transform 0.2s; display: inline-block; transform: ${arrowTransform}; font-size: 11px; color: var(--text-muted);">▶</span>
+          </td>
+          <td><span class="rut">${esc(group.rut)}</span></td>
+          <td><strong>${esc(group.nombre)}</strong></td>
+          <td colspan="3" style="color: var(--text-muted); font-size: 13px;">
+            ${esc(group.cargo || 'Estudiante')} ${group.curso ? `(${esc(group.curso)})` : ''}
+          </td>
+          <td>
+            <span class="badge badge-azul" style="background-color: rgba(99, 102, 241, 0.1); color: var(--primary); font-weight:600;">
+              ${total} ${total === 1 ? 'entrevista' : 'entrevistas'}
+            </span>
+          </td>
+          <td>
+            <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); entrevistar('${esc(group.rut)}')">📋 Ficha / Entrevistar</button>
+          </td>
+        </tr>
+      `;
+      
+      // Child Rows
+      group.items.forEach(e => {
+        html += `
+          <tr class="${uniqueId}" style="display: ${displayStyle}; background-color: #ffffff;">
+            <td style="text-align: center; color: var(--text-muted); font-size: 11px; font-weight: bold;">└</td>
+            <td><span class="rut" style="font-size: 12px; color: var(--text-secondary);">${esc(e.id)}</span></td>
+            <td style="font-size: 12px; color: var(--text-secondary);">📅 ${esc(e.fecha)}</td>
+            <td style="max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(e.objetivo)}">
+              ${esc(e.objetivo)}
+            </td>
+            <td style="font-size: 12px; color: var(--text-secondary);">${esc(e.resp)}</td>
+            <td><span class="badge ${estadoBadge(e.estado)}">${esc(e.estado)}</span></td>
+            <td colspan="2">
+              <div style="display:flex; gap:4px; justify-content: flex-end;">
+                <button class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')">📄 Ver</button>
+                <button class="btn btn-sm btn-danger" onclick="eliminarEnt('${esc(e.id)}')">✖</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+    });
+    
+    tbody.innerHTML = html;
   } catch(e) {
     console.error("Error loading interview history:", e);
   }
