@@ -1288,6 +1288,26 @@ async function guardarEntrevista() {
     return;
   }
   
+  const privacidad = document.getElementById('e-privacidad').value;
+  let obsVal = document.getElementById('e-obs').value;
+  
+  if (privacidad === 'Confidencial') {
+    obsVal = obsVal.replace(/\n\n\[CONFIDENCIAL:[^\]]+\]$/, '');
+    let creador = sessionStorage.getItem('campanario_user') || 'admin';
+    if (editandoEntrevistaId) {
+      const originalEnt = entrevistas.find(x => x.id === editandoEntrevistaId);
+      if (originalEnt) {
+        const match = (originalEnt.obs || '').match(/\[CONFIDENCIAL:([^\]]+)\]$/);
+        if (match) {
+          creador = match[1];
+        }
+      }
+    }
+    obsVal += `\n\n[CONFIDENCIAL:${creador}]`;
+  } else {
+    obsVal = obsVal.replace(/\n\n\[CONFIDENCIAL:[^\]]+\]$/, '');
+  }
+
   const payload = {
     id: editandoEntrevistaId,
     rut,
@@ -1305,7 +1325,7 @@ async function guardarEntrevista() {
     objetivo: document.getElementById('e-objetivo').value,
     motivo: document.getElementById('e-motivo').value,
     acuerdos: document.getElementById('e-acuerdos').value,
-    obs: document.getElementById('e-obs').value
+    obs: obsVal
   };
   
   try {
@@ -1366,6 +1386,8 @@ function limpiarForm() {
     if (el) el.value = '';
   });
   document.getElementById('e-estado').value = 'Abierta';
+  const priv = document.getElementById('e-privacidad');
+  if (priv) priv.value = 'Publica';
   document.getElementById('e-fecha').value = new Date().toISOString().slice(0, 10);
   document.getElementById('e-hora').value = new Date().toTimeString().slice(0, 5);
   document.getElementById('e-seguimiento').value = '';
@@ -1442,17 +1464,66 @@ function estadoBadge(e) {
   return 'badge-gris';
 }
 
-function verReporte(id) {
-  const e = entrevistas.find(x => x.id === id);
-  if (e) {
-    llenarReporte(e);
-    goTo('reporte');
+async function verificarAccesoEntrevista(e) {
+  const obsText = e.obs || '';
+  const match = obsText.match(/\[CONFIDENCIAL:([^\]]+)\]$/);
+  if (!match) {
+    return true;
+  }
+  
+  const creador = match[1];
+  const currentUser = sessionStorage.getItem('campanario_user');
+  
+  if (currentUser === creador) {
+    return true;
+  }
+  
+  const clave = prompt(`Esta entrevista es confidencial. Solo la puede ver el usuario '${creador}' (o ingresando su contraseña).\n\nPor favor, ingrese la contraseña de '${creador}' para continuar:`);
+  if (clave === null) {
+    return false;
+  }
+  
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: creador, password: clave })
+    });
+    const data = await res.json();
+    if (data && data.success) {
+      toast("🔑 Contraseña correcta. Acceso concedido.");
+      return true;
+    } else {
+      alert("❌ Contraseña incorrecta. Acceso denegado.");
+      return false;
+    }
+  } catch (err) {
+    console.error("Error al verificar contraseña de confidencialidad:", err);
+    alert("❌ Error de red al verificar la contraseña.");
+    return false;
   }
 }
 
-function cargarEntrevistaParaEditar(id) {
+async function verReporte(id) {
   const e = entrevistas.find(x => x.id === id);
   if (!e) return;
+  
+  const tieneAcceso = await verificarAccesoEntrevista(e);
+  if (!tieneAcceso) return;
+  
+  const eClone = { ...e };
+  eClone.obs = (e.obs || '').replace(/\n\n\[CONFIDENCIAL:[^\]]+\]$/, '');
+  
+  llenarReporte(eClone);
+  goTo('reporte');
+}
+
+async function cargarEntrevistaParaEditar(id) {
+  const e = entrevistas.find(x => x.id === id);
+  if (!e) return;
+  
+  const tieneAcceso = await verificarAccesoEntrevista(e);
+  if (!tieneAcceso) return;
   
   editandoEntrevistaId = id;
   goTo('nueva-entrevista');
@@ -1472,7 +1543,16 @@ function cargarEntrevistaParaEditar(id) {
   document.getElementById('e-objetivo').value = e.objetivo;
   document.getElementById('e-motivo').value = e.motivo;
   document.getElementById('e-acuerdos').value = e.acuerdos;
-  document.getElementById('e-obs').value = e.obs;
+  
+  const obsText = e.obs || '';
+  const match = obsText.match(/\[CONFIDENCIAL:([^\]]+)\]$/);
+  if (match) {
+    document.getElementById('e-privacidad').value = 'Confidencial';
+    document.getElementById('e-obs').value = obsText.replace(/\n\n\[CONFIDENCIAL:[^\]]+\]$/, '');
+  } else {
+    document.getElementById('e-privacidad').value = 'Publica';
+    document.getElementById('e-obs').value = obsText;
+  }
   
   const btnSave = document.querySelector('#ent-btn-row button:first-child');
   if (btnSave) btnSave.innerHTML = '💾 Actualizar entrevista';
@@ -1482,6 +1562,12 @@ function cargarEntrevistaParaEditar(id) {
 }
 
 async function eliminarEnt(id) {
+  const e = entrevistas.find(x => x.id === id);
+  if (!e) return;
+  
+  const tieneAcceso = await verificarAccesoEntrevista(e);
+  if (!tieneAcceso) return;
+
   if (!confirm('¿Eliminar entrevista ' + id + '?')) return;
   try {
     const res = await fetch(`/api/entrevistas?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
