@@ -649,7 +649,7 @@ async function buscarGlobal() {
         <td>${esc(desc)}</td>
         <td>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-sm btn-primary" onclick="entrevistar('${esc(r)}')">📝 Entrevistar</button>
+            <button class="btn btn-sm btn-primary" onclick="entrevistar('${esc(r)}')">📋 Ficha / Entrevistar</button>
             <button class="btn btn-sm btn-secondary" onclick="abrirEditar('${esc(r)}')">✏️</button>
           </div>
         </td>
@@ -805,7 +805,7 @@ async function filtrarEst() {
       <td><span class="badge ${e['Estado Matrícula'] === 'Vigente' ? 'badge-verde' : 'badge-rojo'}">${esc(e['Estado Matrícula'])}</span></td>
       <td>
         <div style="display:flex;gap:6px">
-          <button class="btn btn-sm btn-primary" onclick="entrevistar('${esc(e.RUT)}')">📝 Entrevistar</button>
+          <button class="btn btn-sm btn-primary" onclick="entrevistar('${esc(e.RUT)}')">📋 Ficha / Entrevistar</button>
           <button class="btn btn-sm btn-secondary" onclick="abrirEditar('${esc(e.RUT)}')">✏️ Editar</button>
           <button class="btn btn-sm btn-danger" onclick="eliminarPersona('${esc(e.RUT)}', 'Estudiante')">✖</button>
         </div>
@@ -861,7 +861,7 @@ async function filtrarDoc() {
       <td><span class="badge ${d['Estado/Idoneidad'] === 'OK' ? 'badge-ok' : 'badge-nook'}">${esc(d['Estado/Idoneidad'] || 'OK')}</span></td>
       <td>
         <div style="display:flex;gap:6px">
-          <button class="btn btn-sm btn-primary" onclick="entrevistar('${esc(d.RUT)}')">📝 Entrevistar</button>
+          <button class="btn btn-sm btn-primary" onclick="entrevistar('${esc(d.RUT)}')">📋 Ficha / Entrevistar</button>
           <button class="btn btn-sm btn-secondary" onclick="abrirEditar('${esc(d.RUT)}')">✏️ Editar</button>
           <button class="btn btn-sm btn-danger" onclick="eliminarPersona('${esc(d.RUT)}', 'Docente')">✖</button>
         </div>
@@ -911,7 +911,7 @@ async function filtrarAsi() {
       <td><span class="badge badge-ok">${esc(d['Estado/Idoneidad'] || 'HABILITADO')}</span></td>
       <td>
         <div style="display:flex;gap:6px">
-          <button class="btn btn-sm btn-primary" onclick="entrevistar('${esc(d.RUT)}')">📝 Entrevistar</button>
+          <button class="btn btn-sm btn-primary" onclick="entrevistar('${esc(d.RUT)}')">📋 Ficha / Entrevistar</button>
           <button class="btn btn-sm btn-secondary" onclick="abrirEditar('${esc(d.RUT)}')">✏️ Editar</button>
           <button class="btn btn-sm btn-danger" onclick="eliminarPersona('${esc(d.RUT)}', 'Asistente')">✖</button>
         </div>
@@ -1036,7 +1036,6 @@ async function cargarEntrevistasEnModal(rut) {
           <td>
             <div style="display:flex;gap:4px">
               <button type="button" class="btn btn-sm btn-secondary" onclick="cerrarEditar(); verReporte('${esc(e.id)}')">📄 Ver</button>
-              <button type="button" class="btn btn-sm btn-primary" onclick="cerrarEditar(); cargarEntrevistaParaEditar('${esc(e.id)}')">✏️</button>
             </div>
           </td>
         </tr>
@@ -1289,10 +1288,17 @@ async function guardarEntrevista() {
   }
   
   const privacidad = document.getElementById('e-privacidad').value;
+  const adjunto = document.getElementById('e-adjunto').value.trim();
   let obsVal = document.getElementById('e-obs').value;
   
+  obsVal = obsVal.replace(/\n\n\[CONFIDENCIAL:[^\]]+\]$/, '');
+  obsVal = obsVal.replace(/\n\n\[ADJUNTO:[^\]]+\]$/, '');
+  
+  if (adjunto) {
+    obsVal += `\n\n[ADJUNTO:${adjunto}]`;
+  }
+  
   if (privacidad === 'Confidencial') {
-    obsVal = obsVal.replace(/\n\n\[CONFIDENCIAL:[^\]]+\]$/, '');
     let creador = sessionStorage.getItem('campanario_user') || 'admin';
     if (editandoEntrevistaId) {
       const originalEnt = entrevistas.find(x => x.id === editandoEntrevistaId);
@@ -1304,8 +1310,6 @@ async function guardarEntrevista() {
       }
     }
     obsVal += `\n\n[CONFIDENCIAL:${creador}]`;
-  } else {
-    obsVal = obsVal.replace(/\n\n\[CONFIDENCIAL:[^\]]+\]$/, '');
   }
 
   const payload = {
@@ -1374,14 +1378,15 @@ function previsualizar() {
     objetivo: document.getElementById('e-objetivo').value,
     motivo: document.getElementById('e-motivo').value,
     acuerdos: document.getElementById('e-acuerdos').value,
-    obs: document.getElementById('e-obs').value
+    obs: document.getElementById('e-obs').value,
+    adjunto: document.getElementById('e-adjunto').value.trim()
   };
   llenarReporte(ent);
   goTo('reporte');
 }
 
 function limpiarForm() {
-  ['e-rut', 'e-nombre', 'e-cargo', 'e-curso', 'e-jefe', 'e-asig', 'e-pie', 'e-resp', 'e-objetivo', 'e-motivo', 'e-acuerdos', 'e-obs'].forEach(id => {
+  ['e-rut', 'e-nombre', 'e-cargo', 'e-curso', 'e-jefe', 'e-asig', 'e-pie', 'e-resp', 'e-objetivo', 'e-motivo', 'e-acuerdos', 'e-obs', 'e-adjunto'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -1406,6 +1411,28 @@ function limpiarForm() {
   multiviewSessionId = null;
 }
 
+function parseObsMetadata(obsText) {
+  let cleanObs = obsText || '';
+  let creador = null;
+  let adjunto = null;
+  
+  // Buscar y extraer [CONFIDENCIAL:username]
+  const confMatch = cleanObs.match(/\[CONFIDENCIAL:([^\]]+)\]/);
+  if (confMatch) {
+    creador = confMatch[1];
+    cleanObs = cleanObs.replace(/\n\n\[CONFIDENCIAL:[^\]]+\]/, '').replace(/\[CONFIDENCIAL:[^\]]+\]/, '');
+  }
+  
+  // Buscar y extraer [ADJUNTO:url]
+  const adjMatch = cleanObs.match(/\[ADJUNTO:([^\]]+)\]/);
+  if (adjMatch) {
+    adjunto = adjMatch[1];
+    cleanObs = cleanObs.replace(/\n\n\[ADJUNTO:[^\]]+\]/, '').replace(/\[ADJUNTO:[^\]]+\]/, '');
+  }
+  
+  return { obs: cleanObs.trim(), creador, adjunto };
+}
+
 function llenarReporte(e) {
   document.getElementById('r-id').textContent = e.id || '';
   document.getElementById('r-fecha').textContent = txt(e.fecha) + ' ' + txt(e.hora);
@@ -1422,7 +1449,22 @@ function llenarReporte(e) {
   document.getElementById('r-acu').textContent = e.acuerdos || '';
   document.getElementById('r-seg').textContent = e.seguimiento || 'No fijado';
   document.getElementById('r-estado').textContent = e.estado || '';
-  document.getElementById('r-obs').textContent = e.obs || '';
+  
+  const meta = parseObsMetadata(e.obs);
+  document.getElementById('r-obs').textContent = meta.obs;
+  
+  // Handle documentation / attachment link
+  const adjunto = e.adjunto || meta.adjunto;
+  const adjRow = document.getElementById('r-adjunto-row');
+  const adjLink = document.getElementById('r-adjunto-link');
+  if (adjRow && adjLink) {
+    if (adjunto) {
+      adjLink.href = adjunto;
+      adjRow.style.display = 'grid';
+    } else {
+      adjRow.style.display = 'none';
+    }
+  }
 }
 
 // ══ HISTORIAL ══
@@ -1446,7 +1488,6 @@ async function filtrarHistorial() {
       <td>
         <div style="display:flex;gap:4px">
           <button class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')">📄 Ver</button>
-          <button class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditar('${esc(e.id)}')">✏️</button>
           <button class="btn btn-sm btn-danger" onclick="eliminarEnt('${esc(e.id)}')">✖</button>
         </div>
       </td>
@@ -1534,20 +1575,17 @@ function mostrarPromptConfidencial(creador) {
 }
 
 async function verificarAccesoEntrevista(e) {
-  const obsText = e.obs || '';
-  const match = obsText.match(/\[CONFIDENCIAL:([^\]]+)\]$/);
-  if (!match) {
+  const meta = parseObsMetadata(e.obs);
+  if (!meta.creador) {
     return true;
   }
   
-  const creador = match[1];
   const currentUser = sessionStorage.getItem('campanario_user');
-  
-  if (currentUser === creador) {
+  if (currentUser === meta.creador) {
     return true;
   }
   
-  return await mostrarPromptConfidencial(creador);
+  return await mostrarPromptConfidencial(meta.creador);
 }
 
 async function verReporte(id) {
@@ -1558,7 +1596,9 @@ async function verReporte(id) {
   if (!tieneAcceso) return;
   
   const eClone = { ...e };
-  eClone.obs = (e.obs || '').replace(/\n\n\[CONFIDENCIAL:[^\]]+\]$/, '');
+  const meta = parseObsMetadata(e.obs);
+  eClone.obs = meta.obs;
+  eClone.adjunto = meta.adjunto;
   
   llenarReporte(eClone);
   goTo('reporte');
@@ -1590,14 +1630,14 @@ async function cargarEntrevistaParaEditar(id) {
   document.getElementById('e-motivo').value = e.motivo;
   document.getElementById('e-acuerdos').value = e.acuerdos;
   
-  const obsText = e.obs || '';
-  const match = obsText.match(/\[CONFIDENCIAL:([^\]]+)\]$/);
-  if (match) {
+  const meta = parseObsMetadata(e.obs);
+  document.getElementById('e-obs').value = meta.obs;
+  document.getElementById('e-adjunto').value = meta.adjunto || '';
+  
+  if (meta.creador) {
     document.getElementById('e-privacidad').value = 'Confidencial';
-    document.getElementById('e-obs').value = obsText.replace(/\n\n\[CONFIDENCIAL:[^\]]+\]$/, '');
   } else {
     document.getElementById('e-privacidad').value = 'Publica';
-    document.getElementById('e-obs').value = obsText;
   }
   
   const btnSave = document.querySelector('#ent-btn-row button:first-child');
@@ -2142,7 +2182,7 @@ async function cargarHistorialCita(rut) {
             <td>
               <div style="display:flex;gap:4px">
                 <button type="button" class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')">📄 Ver</button>
-                ${esActual ? '<span style="color:var(--text-muted);font-size:12px;padding:4px 8px;font-style:italic;">Editando</span>' : `<button type="button" class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditar('${esc(e.id)}')">✏️</button>`}
+                ${esActual ? '<span style="color:var(--text-muted);font-size:12px;padding:4px 8px;font-style:italic;">Editando</span>' : ''}
               </div>
             </td>
           </tr>

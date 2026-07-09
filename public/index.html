@@ -557,6 +557,10 @@
         <label>Fecha próxima revisión (Seguimiento)</label>
         <input type="date" id="e-seguimiento">
       </div>
+      <div class="form-group">
+        <label>Enlace de Evidencia / Google Drive</label>
+        <input id="e-adjunto" placeholder="Pegue el enlace de Google Drive o archivo adjunto...">
+      </div>
     </div>
     
     <div class="form-grid" style="margin-top:16px">
@@ -689,6 +693,12 @@
         <div class="rpt-cell" id="r-seg"></div>
         <div class="rpt-cell rpt-label">Estado Ficha</div>
         <div class="rpt-cell" id="r-estado"></div>
+      </div>
+      <div class="rpt-row full no-print" id="r-adjunto-row" style="display: none; border-bottom: 1px solid #e2e8f0;">
+        <div class="rpt-cell rpt-label">Documentación Adjunta</div>
+        <div class="rpt-cell" style="min-height:36px; display: flex; align-items: center; padding: 10px 14px;">
+          <a id="r-adjunto-link" href="#" target="_blank" style="color: var(--primary, #4f46e5); font-weight: 600; text-decoration: none;">🔗 Ver documento en Google Drive / Evidencia</a>
+        </div>
       </div>
       <div class="rpt-row full">
         <div class="rpt-cell rpt-label last-row">Observaciones Generales</div>
@@ -1082,6 +1092,6 @@
 </div>
 
 
-<script src="logic.js?v=1.4" defer></script>
+<script src="logic.js?v=1.5" defer></script>
 </body>
 </html>
