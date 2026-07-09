@@ -2,6 +2,74 @@
 const SUPABASE_URL = "https://squfklurqnnoujcmvxjh.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_i7ruBqqrqr4ro8YywVk0sQ_VhvY_R-m";
 
+// Configuración para la subida directa a Google Drive
+const GOOGLE_SCRIPT_URL = ""; // Pegar aquí la URL del Web App desplegada de Google Apps Script
+
+async function subirArchivoADrive(input) {
+  const file = input.files[0];
+  if (!file) return;
+  
+  const rut = document.getElementById('e-rut').value.trim();
+  if (!rut) {
+    toast("⚠️ Ingrese el RUT del entrevistado antes de subir un archivo");
+    input.value = '';
+    return;
+  }
+  
+  if (!GOOGLE_SCRIPT_URL) {
+    alert("⚠️ Para habilitar la subida directa a Google Drive, debes implementar el script de Google y guardar su URL en la variable GOOGLE_SCRIPT_URL al inicio de public/logic.js");
+    input.value = '';
+    return;
+  }
+  
+  const btn = document.getElementById('btn-upload-file');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = "⏳ Subiendo...";
+  btn.disabled = true;
+  
+  const reader = new FileReader();
+  reader.onload = async function() {
+    const base64Data = reader.result.split(',')[1];
+    const payload = {
+      filename: file.name,
+      mimeType: file.type,
+      base64Data: base64Data,
+      rut: rut
+    };
+    
+    try {
+      const res = await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        document.getElementById('e-adjunto').value = data.url;
+        toast("📁 Archivo subido con éxito a Google Drive");
+      } else {
+        alert("❌ Error al subir archivo: " + (data.error || "Desconocido"));
+      }
+    } catch (err) {
+      console.error("Error al subir archivo a Drive:", err);
+      alert("❌ Error de conexión al script de Google Drive. Asegúrese de que esté desplegado como Web App y permita el acceso a 'Cualquiera' (Anyone).");
+    } finally {
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+      input.value = '';
+    }
+  };
+  
+  reader.onerror = function() {
+    toast("❌ Error al leer el archivo");
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+    input.value = '';
+  };
+  
+  reader.readAsDataURL(file);
+}
+
 const originalFetch = window.fetch;
 window.fetch = async function(url, options = {}) {
   if (typeof url === 'string' && url.startsWith('/api/')) {
