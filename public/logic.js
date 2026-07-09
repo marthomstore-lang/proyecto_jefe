@@ -1464,6 +1464,75 @@ function estadoBadge(e) {
   return 'badge-gris';
 }
 
+let confidencialResolve = null;
+
+function cerrarModalConfidencial() {
+  document.getElementById('modal-confidencial').classList.remove('open');
+  if (confidencialResolve) {
+    confidencialResolve(false);
+    confidencialResolve = null;
+  }
+}
+
+function handleConfidencialKeydown(e) {
+  if (e.key === 'Enter') {
+    confirmarClaveConfidencial();
+  }
+}
+
+async function confirmarClaveConfidencial() {
+  const clave = document.getElementById('confidencial-input').value;
+  if (!clave) {
+    toast("⚠️ Ingrese la contraseña");
+    return;
+  }
+  
+  const modal = document.getElementById('modal-confidencial');
+  const creador = modal.getAttribute('data-creador');
+  
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: creador, password: clave })
+    });
+    const data = await res.json();
+    if (data && data.success) {
+      toast("🔑 Contraseña correcta. Acceso concedido.");
+      document.getElementById('modal-confidencial').classList.remove('open');
+      if (confidencialResolve) {
+        confidencialResolve(true);
+        confidencialResolve = null;
+      }
+    } else {
+      toast("❌ Contraseña incorrecta");
+      const inp = document.getElementById('confidencial-input');
+      inp.value = '';
+      inp.focus();
+    }
+  } catch (err) {
+    console.error("Error al verificar contraseña de confidencialidad:", err);
+    toast("❌ Error de red");
+  }
+}
+
+function mostrarPromptConfidencial(creador) {
+  return new Promise((resolve) => {
+    confidencialResolve = resolve;
+    
+    const modal = document.getElementById('modal-confidencial');
+    modal.setAttribute('data-creador', creador);
+    document.getElementById('confidencial-msg').innerHTML = `Esta entrevista es confidencial. Solo la puede ver el usuario <strong>'${creador}'</strong> (o ingresando su contraseña).<br><br>Por favor, ingrese la contraseña de <strong>'${creador}'</strong> para continuar:`;
+    document.getElementById('confidencial-label').textContent = `Contraseña de ${creador}`;
+    
+    const inp = document.getElementById('confidencial-input');
+    inp.value = '';
+    
+    modal.classList.add('open');
+    setTimeout(() => inp.focus(), 100);
+  });
+}
+
 async function verificarAccesoEntrevista(e) {
   const obsText = e.obs || '';
   const match = obsText.match(/\[CONFIDENCIAL:([^\]]+)\]$/);
@@ -1478,30 +1547,7 @@ async function verificarAccesoEntrevista(e) {
     return true;
   }
   
-  const clave = prompt(`Esta entrevista es confidencial. Solo la puede ver el usuario '${creador}' (o ingresando su contraseña).\n\nPor favor, ingrese la contraseña de '${creador}' para continuar:`);
-  if (clave === null) {
-    return false;
-  }
-  
-  try {
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: creador, password: clave })
-    });
-    const data = await res.json();
-    if (data && data.success) {
-      toast("🔑 Contraseña correcta. Acceso concedido.");
-      return true;
-    } else {
-      alert("❌ Contraseña incorrecta. Acceso denegado.");
-      return false;
-    }
-  } catch (err) {
-    console.error("Error al verificar contraseña de confidencialidad:", err);
-    alert("❌ Error de red al verificar la contraseña.");
-    return false;
-  }
+  return await mostrarPromptConfidencial(creador);
 }
 
 async function verReporte(id) {
