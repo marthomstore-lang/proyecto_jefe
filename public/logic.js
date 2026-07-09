@@ -3,7 +3,7 @@ const SUPABASE_URL = "https://squfklurqnnoujcmvxjh.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_i7ruBqqrqr4ro8YywVk0sQ_VhvY_R-m";
 
 // Configuración para la subida directa a Google Drive
-const GOOGLE_SCRIPT_URL = ""; // Pegar aquí la URL del Web App desplegada de Google Apps Script
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzqUwzmnjajLpYq70mzzzznooRu70laLt_N9n-bfN5gMiY0BtjZsxw43qxdse_07AwfLA/exec"; // URL de Google Apps Script para subidas directas
 
 async function subirArchivoADrive(input) {
   const file = input.files[0];
