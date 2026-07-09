@@ -73,7 +73,7 @@
   
   <div class="nav-section">
     <div class="nav-label">Entrevistas</div>
-    <div class="nav-item" onclick="goTo('nueva-entrevista')"><span class="icon">📝</span> Nueva entrevista</div>
+    <div class="nav-item" onclick="limpiarForm(); goTo('nueva-entrevista')"><span class="icon">📝</span> Nueva entrevista</div>
     <div class="nav-item" onclick="goTo('historial')"><span class="icon">🕘</span> Historial <span class="badge-count" id="cnt-ent">0</span></div>
     <div class="nav-item" onclick="goTo('reporte')"><span class="icon">📄</span> Ficha Impresión</div>
   </div>
@@ -236,7 +236,7 @@
       <strong>Base de Asistentes</strong>
       <span>Consultar roles de apoyo, fonoaudiólogos, psicólogos, asistentes diferenciales e inspectores.</span>
     </div>
-    <div class="module-action" onclick="goTo('nueva-entrevista')">
+    <div class="module-action" onclick="limpiarForm(); goTo('nueva-entrevista')">
       <strong>Entrevista a Funcionario</strong>
       <span>Generar una nueva ficha de entrevista y acuerdos para docentes o personal administrativo.</span>
     </div>
@@ -260,7 +260,7 @@
       <strong>Base de Estudiantes</strong>
       <span>Buscador por curso, edad, RUT, matrícula vigente y ficha individual.</span>
     </div>
-    <div class="module-action" onclick="goTo('nueva-entrevista')">
+    <div class="module-action" onclick="limpiarForm(); goTo('nueva-entrevista')">
       <strong>Nueva entrevista</strong>
       <span>Registrar acuerdos con apoderados o estudiantes y derivaciones internas.</span>
     </div>
@@ -497,6 +497,31 @@
     </div>
   </div>
 
+  <!-- Sección: Historial del Caso (Entrevistas Previas) -->
+  <div class="card" id="e-historial-card" style="display: none; border-left: 4px solid var(--primary, #4f46e5);">
+    <div style="font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+      <span style="display:flex; align-items:center; gap:6px">📚 Historial del Caso (Entrevistas de este RUT)</span>
+      <button type="button" class="btn btn-primary btn-sm" onclick="crearOtraEntrevistaDesdeForm()">➕ Nueva Entrevista para este RUT</button>
+    </div>
+    <div class="tbl-wrap" style="max-height: 200px; overflow-y: auto;">
+      <table id="tbl-e-historial">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Fecha</th>
+            <th>Objetivo</th>
+            <th>Responsable</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Se cargará dinámicamente -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-title" style="margin-bottom:16px; font-size:15px; font-weight:600">📋 Antecedentes y Compromisos de la Entrevista</div>
     <div class="form-grid">
@@ -550,6 +575,7 @@
     <div class="btn-row" id="ent-btn-row">
       <button class="btn btn-primary" onclick="guardarEntrevista()">💾 Guardar entrevista</button>
       <button class="btn btn-success" onclick="previsualizar()">👁 Previsualizar reporte</button>
+      <button class="btn btn-secondary" onclick="abrirMultivistaModal()" style="display:flex; align-items:center; gap:6px;">📺 Compartir Pantalla (QR)</button>
       <button class="btn btn-secondary" onclick="limpiarForm()">✖ Cancelar / Limpiar</button>
     </div>
   </div>
@@ -895,7 +921,7 @@
 
 <!-- EDIT PERSON MODAL -->
 <div class="modal-bg" id="modal-editar">
-  <div class="modal">
+  <div class="modal" style="max-width:800px">
     <div class="modal-header">
       <div class="modal-title">✏️ Editar Información de Registro</div>
       <button class="modal-close" onclick="cerrarEditar()">✖</button>
@@ -964,12 +990,67 @@
         <button type="button" class="btn btn-secondary" onclick="cerrarEditar()">✖ Cancelar</button>
       </div>
     </form>
+    
+    <!-- Sección: Historial de Entrevistas / Vista del Caso -->
+    <div id="edit-interviews-section" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border);">
+      <div style="font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+        <span style="display:flex; align-items:center; gap:6px">📋 Historial de Entrevistas / Vista del Caso</span>
+        <button type="button" class="btn btn-primary btn-sm" onclick="crearEntrevistaDesdeModal()">➕ Agregar Entrevista</button>
+      </div>
+      <div class="tbl-wrap" style="max-height: 200px; overflow-y: auto;">
+        <table id="tbl-edit-interviews">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Fecha</th>
+              <th>Objetivo</th>
+              <th>Responsable</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Se poblará dinámicamente con JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MULTIVIEW SHARE MODAL -->
+<div class="modal-bg" id="modal-multivista">
+  <div class="modal" style="max-width: 450px; text-align: center;">
+    <div class="modal-header">
+      <div class="modal-title">📺 Compartir Pantalla (Multivista)</div>
+      <button class="modal-close" onclick="cerrarMultivistaModal()">✖</button>
+    </div>
+    <p style="color: var(--text-muted, #64748b); font-size: 14px; margin-bottom: 20px;">
+      El entrevistado puede escanear este código QR con su celular o tablet para ver en tiempo real lo que vas escribiendo.
+    </p>
+    
+    <div style="background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid var(--border, #e2e8f0); display: inline-block; margin-bottom: 20px; width: calc(100% - 40px);">
+      <div id="multivista-qr" style="width: 200px; height: 200px; margin: 0 auto; display: flex; align-items: center; justify-content: center; background: #fff; border-radius: 8px; border: 1px solid var(--border, #e2e8f0);">
+        <!-- El código QR se cargará aquí -->
+      </div>
+    </div>
+    
+    <div style="text-align: left; margin-bottom: 12px;">
+      <label style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--text-muted, #64748b);">Enlace de la Multivista</label>
+      <div style="display: flex; gap: 8px; margin-top: 6px;">
+        <input id="multivista-link" readonly style="flex: 1; background: var(--bg-app, #f1f5f9); cursor: pointer; padding: 10px; border-radius: 8px; border: 1px solid var(--border, #e2e8f0); font-size: 13px;" onclick="this.select(); document.execCommand('copy'); toast('📋 Enlace copiado al portapapeles');">
+        <button type="button" class="btn btn-primary" onclick="copiarMultivistaLink()">Copiar</button>
+      </div>
+    </div>
+    <div style="margin-top: 20px; display: flex; justify-content: center;">
+      <span class="badge badge-verde" id="multivista-status-badge" style="background-color: rgba(16, 185, 129, 0.1); color: #10b981; padding: 6px 16px; border-radius: 999px; font-weight: 600; font-size: 13px; border: 1px solid rgba(16, 185, 129, 0.2);">🟢 Transmisión Activa</span>
+    </div>
   </div>
 </div>
 
 </div>
 
 
-<script src="logic.js" defer></script>
+<script src="logic.js?v=1.1" defer></script>
 </body>
 </html>

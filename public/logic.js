@@ -256,8 +256,8 @@ window.fetch = async function(url, options = {}) {
           const q = (searchParams.get('q') || '').trim().toLowerCase();
           if (q) {
             return mockResponse(frontendRows.filter(x => {
-              const nameStr = `${x.Nombres || ''} ${x['Apellido Paterno'] || x['Apellido paterno'] || ''} ${x['Apellido Materno'] || x['Apellido materno'] || ''}`.toLowerCase();
-              const rutStr = (x.RUT || x.id || '').toLowerCase();
+              const nameStr = `${x.Nombres || x.nombre || ''} ${x['Apellido Paterno'] || ''} ${x['Apellido Materno'] || ''} ${x.resp || ''}`.toLowerCase();
+              const rutStr = (x.RUT || x.rut || x.id || '').toLowerCase();
               return nameStr.includes(q) || rutStr.includes(q);
             }));
           }
@@ -318,12 +318,14 @@ window.fetch = async function(url, options = {}) {
           
           let responseId = body.id;
           if (sbTable === 'entrevistas' && (!body.id || body.id === '(vista previa)')) {
-            const resCount = await originalFetch(`${SUPABASE_URL}/rest/v1/entrevistas?select=count`, {
-              headers: { ...headers, 'Prefer': 'count=exact' }
-            });
-            const contentRange = resCount.headers.get('Content-Range');
-            const count = contentRange ? parseInt(contentRange.split('/')[1]) : 0;
-            responseId = `ENT-${String(count + 1).padStart(4, '0')}`;
+            const resEnts = await originalFetch(`${SUPABASE_URL}/rest/v1/entrevistas?select=id`, { headers });
+            const entsData = await resEnts.json();
+            const existingIds = new Set(entsData.map(e => e.id));
+            let suffix = 1;
+            while (existingIds.has(`ENT-${String(suffix).padStart(4, '0')}`)) {
+              suffix++;
+            }
+            responseId = `ENT-${String(suffix).padStart(4, '0')}`;
             dbBody.id = responseId;
           }
           
@@ -380,6 +382,8 @@ let entrevistas = [];
 let localCont = [];
 let localAdmin = [];
 let editandoEntrevistaId = null;
+let multiviewSessionId = null;
+let multiviewInterval = null;
 
 // Mask RUT helper in real-time
 function formatRut(rutStr) {
@@ -947,6 +951,7 @@ async function abrirEditar(rut) {
       document.getElementById('edit-idoneidad').value = p['Estado/Idoneidad'] || 'OK';
     }
     
+    await cargarEntrevistasEnModal(rut);
     document.getElementById('modal-editar').classList.add('open');
   } catch (e) {
     console.error("Error opening edit modal:", e);
@@ -955,6 +960,47 @@ async function abrirEditar(rut) {
 
 function cerrarEditar() {
   document.getElementById('modal-editar').classList.remove('open');
+}
+
+async function cargarEntrevistasEnModal(rut) {
+  const tbody = document.querySelector('#tbl-edit-interviews tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:12px;color:var(--text-muted)">Cargando historial de entrevistas...</td></tr>';
+  
+  try {
+    const res = await fetch('/api/entrevistas');
+    const allEnts = await res.json();
+    const userEnts = allEnts.filter(x => txt(x.rut).toUpperCase() === txt(rut).toUpperCase());
+    
+    if (userEnts.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:12px;color:var(--text-muted)">No hay entrevistas registradas para esta persona.</td></tr>';
+    } else {
+      tbody.innerHTML = userEnts.map(e => `
+        <tr>
+          <td><span class="rut">${esc(e.id)}</span></td>
+          <td>${esc(e.fecha)}</td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.objetivo)}">${esc(e.objetivo)}</td>
+          <td>${esc(e.resp)}</td>
+          <td><span class="badge ${estadoBadge(e.estado)}">${esc(e.estado)}</span></td>
+          <td>
+            <div style="display:flex;gap:4px">
+              <button type="button" class="btn btn-sm btn-secondary" onclick="cerrarEditar(); verReporte('${esc(e.id)}')">📄 Ver</button>
+              <button type="button" class="btn btn-sm btn-primary" onclick="cerrarEditar(); cargarEntrevistaParaEditar('${esc(e.id)}')">✏️</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+  } catch (err) {
+    console.error("Error loading interviews in modal:", err);
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:12px;color:var(--danger)">Error al cargar historial.</td></tr>';
+  }
+}
+
+function crearEntrevistaDesdeModal() {
+  const rut = document.getElementById('edit-rut').value;
+  cerrarEditar();
+  entrevistar(rut);
 }
 
 async function guardarCambiosPersona() {
@@ -1157,6 +1203,7 @@ function limpiarAdmin() {
 
 // ══ ENTREVISTAS ══
 async function entrevistar(rut) {
+  limpiarForm();
   document.getElementById('e-rut').value = rut;
   await autocompletarEnt();
   goTo('nueva-entrevista');
@@ -1177,6 +1224,7 @@ async function autocompletarEnt() {
     document.getElementById('e-jefe').value = txt(p['Profesor Jefe'] || p['Profesor jefe (curso)'] || 'No aplica');
     document.getElementById('e-asig').value = txt(p['Asignatura'] || p['Profesor de Asignatura'] || 'No aplica');
     document.getElementById('e-pie').value = txt(p['Profesor PIE'] || 'No aplica');
+    await cargarHistorialCita(rut);
   } catch(e) {
     console.error("Error autocompleting:", e);
   }
@@ -1274,6 +1322,15 @@ function limpiarForm() {
   editandoEntrevistaId = null;
   const btnSave = document.querySelector('#ent-btn-row button:first-child');
   if (btnSave) btnSave.innerHTML = '💾 Guardar entrevista';
+  
+  const card = document.getElementById('e-historial-card');
+  if (card) card.style.display = 'none';
+  
+  if (multiviewInterval) {
+    clearInterval(multiviewInterval);
+    multiviewInterval = null;
+  }
+  multiviewSessionId = null;
 }
 
 function llenarReporte(e) {
@@ -1370,6 +1427,7 @@ function cargarEntrevistaParaEditar(id) {
   if (btnSave) btnSave.innerHTML = '💾 Actualizar entrevista';
   
   toast(`✏️ Cargada entrevista ${id} para edición`);
+  cargarHistorialCita(e.rut);
 }
 
 async function eliminarEnt(id) {
@@ -1867,3 +1925,135 @@ setTimeout(() => {
   buscarGlobal();
   bindRutMasks();
 }, 200);
+
+async function cargarHistorialCita(rut) {
+  const card = document.getElementById('e-historial-card');
+  const tbody = document.querySelector('#tbl-e-historial tbody');
+  if (!card || !tbody) return;
+  
+  if (!rut) {
+    card.style.display = 'none';
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/entrevistas');
+    const allEnts = await res.json();
+    
+    // Filtrar por RUT (todas las entrevistas de este estudiante/funcionario)
+    const userEnts = allEnts.filter(x => txt(x.rut).toUpperCase() === txt(rut).toUpperCase());
+    
+    if (userEnts.length === 0) {
+      card.style.display = 'none';
+    } else {
+      card.style.display = 'block';
+      tbody.innerHTML = userEnts.map(e => {
+        const esActual = e.id === editandoEntrevistaId;
+        return `
+          <tr style="${esActual ? 'background-color: rgba(99, 102, 241, 0.08); font-weight: 500;' : ''}">
+            <td><span class="rut">${esc(e.id)} ${esActual ? '📝 <span style="font-size:11px;color:var(--primary);font-weight:600;">(actual)</span>' : ''}</span></td>
+            <td>${esc(e.fecha)}</td>
+            <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.objetivo)}">${esc(e.objetivo)}</td>
+            <td>${esc(e.resp)}</td>
+            <td><span class="badge ${estadoBadge(e.estado)}">${esc(e.estado)}</span></td>
+            <td>
+              <div style="display:flex;gap:4px">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')">📄 Ver</button>
+                ${esActual ? '<span style="color:var(--text-muted);font-size:12px;padding:4px 8px;font-style:italic;">Editando</span>' : `<button type="button" class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditar('${esc(e.id)}')">✏️</button>`}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+  } catch (err) {
+    console.error("Error loading interview history on citation form:", err);
+  }
+}
+
+function crearOtraEntrevistaDesdeForm() {
+  const rut = document.getElementById('e-rut').value.trim();
+  if (!rut) return;
+  limpiarForm();
+  document.getElementById('e-rut').value = rut;
+  autocompletarEnt();
+  toast('📝 Iniciando nueva entrevista para el mismo RUT');
+}
+
+async function abrirMultivistaModal() {
+  if (!multiviewSessionId) {
+    multiviewSessionId = 'MVT-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+  }
+  
+  try {
+    const res = await fetch('/api/multivista/info');
+    const info = await res.json();
+    const localIp = info.ip || 'localhost';
+    const port = info.port || 8080;
+    
+    const url = `http://${localIp}:${port}/multiview.html?session=${multiviewSessionId}`;
+    
+    document.getElementById('multivista-link').value = url;
+    document.getElementById('multivista-qr').innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}" alt="Código QR" style="max-width:100%; height:auto; display:block;">`;
+    
+    document.getElementById('modal-multivista').classList.add('open');
+    
+    // Iniciar transmisión en vivo
+    iniciarTransmisionMultivista();
+  } catch (err) {
+    console.error("Error al inicializar multivista:", err);
+    toast("❌ Error al inicializar multivista");
+  }
+}
+
+function cerrarMultivistaModal() {
+  document.getElementById('modal-multivista').classList.remove('open');
+}
+
+function copiarMultivistaLink() {
+  const input = document.getElementById('multivista-link');
+  input.select();
+  document.execCommand('copy');
+  toast('📋 Enlace copiado al portapapeles');
+}
+
+function iniciarTransmisionMultivista() {
+  if (multiviewInterval) clearInterval(multiviewInterval);
+  
+  transmitirEstadoMultivista();
+  multiviewInterval = setInterval(transmitirEstadoMultivista, 1500);
+}
+
+async function transmitirEstadoMultivista() {
+  if (!multiviewSessionId) return;
+  
+  const payload = {
+    sessionId: multiviewSessionId,
+    rut: document.getElementById('e-rut').value,
+    nombre: document.getElementById('e-nombre').value,
+    cargo: document.getElementById('e-cargo').value,
+    curso: document.getElementById('e-curso').value,
+    jefe: document.getElementById('e-jefe').value,
+    asig: document.getElementById('e-asig').value,
+    pie: document.getElementById('e-pie').value,
+    fecha: document.getElementById('e-fecha').value,
+    hora: document.getElementById('e-hora').value,
+    resp: document.getElementById('e-resp').value,
+    estado: document.getElementById('e-estado').value,
+    seguimiento: document.getElementById('e-seguimiento').value,
+    objetivo: document.getElementById('e-objetivo').value,
+    motivo: document.getElementById('e-motivo').value,
+    acuerdos: document.getElementById('e-acuerdos').value,
+    obs: document.getElementById('e-obs').value
+  };
+  
+  try {
+    await fetch('/api/multivista/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (err) {
+    console.error("Error transmitting multiview:", err);
+  }
+}

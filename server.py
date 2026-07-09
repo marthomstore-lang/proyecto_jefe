@@ -32,6 +32,20 @@ else:
     DB_ENGINE = "sqlite"
     print("Usando Base de Datos local SQLite (campanario.db)")
 
+active_sessions = {}
+
+def get_local_ip():
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
 
 class RowWrapper(dict):
     def __getitem__(self, key):
@@ -249,6 +263,14 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
             self.send_error(500, f"Internal Server Error: {str(e)}")
 
     def handle_api_get(self, path, query):
+        if path == '/api/multivista/live':
+            session = query.get('session', [''])[0].strip()
+            self.send_json(active_sessions.get(session, {}))
+            return
+        elif path == '/api/multivista/info':
+            self.send_json({"ip": get_local_ip(), "port": PORT})
+            return
+
         conn = get_db_connection()
         cursor = get_db_cursor(conn)
         
@@ -505,6 +527,15 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "Invalid JSON Body"}, status=400)
             return
 
+        if path == '/api/multivista/update':
+            session_id = body.get("sessionId")
+            if session_id:
+                active_sessions[session_id] = body
+                self.send_json({"success": True})
+            else:
+                self.send_json({"success": False, "error": "Missing sessionId"}, status=400)
+            return
+
         conn = get_db_connection()
         cursor = get_db_cursor(conn)
         
@@ -649,10 +680,13 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
             elif path == '/api/entrevistas':
                 ent_id = body.get("id")
                 if not ent_id or ent_id == '(vista previa)':
-                    # Generar ID
-                    cursor.execute("SELECT COUNT(*) FROM entrevistas")
-                    count = cursor.fetchone()[0]
-                    ent_id = f"ENT-{str(count + 1).zfill(4)}"
+                    # Generar ID robusto sin colisiones
+                    cursor.execute("SELECT id FROM entrevistas WHERE id LIKE 'ENT-%'")
+                    existing_ids = {row[0] for row in cursor.fetchall()}
+                    suffix = 1
+                    while f"ENT-{str(suffix).zfill(4)}" in existing_ids:
+                        suffix += 1
+                    ent_id = f"ENT-{str(suffix).zfill(4)}"
                 
                 cursor.execute("""
                 INSERT OR REPLACE INTO entrevistas (
@@ -852,8 +886,9 @@ def run_server():
         if 'conn' in locals():
             release_db_connection(conn)
 
+    from http.server import ThreadingHTTPServer
     server_address = ('', PORT)
-    httpd = HTTPServer(server_address, CampanarioRequestHandler)
+    httpd = ThreadingHTTPServer(server_address, CampanarioRequestHandler)
     print(f"Servidor Campanario SQLite corriendo en: http://localhost:{PORT}")
     try:
         httpd.serve_forever()
