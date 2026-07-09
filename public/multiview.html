@@ -224,31 +224,94 @@
     }
 
     const prevValues = {};
+    let useSupabaseFallback = false;
 
     async function fetchLiveState() {
       try {
+        if (useSupabaseFallback) {
+          await fetchFromSupabase();
+          return;
+        }
+
         const res = await fetch(`/api/multivista/live?session=${encodeURIComponent(session)}`);
-        if (!res.ok) throw new Error("Error en petición");
-        const data = await res.json();
+        if (!res.ok) {
+          throw new Error("Server returned error status");
+        }
         
-        if (data && data.sessionId) {
-          updateField('v-nombre', data.nombre);
-          updateField('v-rut', data.rut);
-          updateField('v-curso', `${data.cargo || ''} - ${data.curso || ''}`);
-          updateField('v-cita', `${data.fecha || ''} ${data.hora || ''} (con ${data.resp || 'responsable'})`);
-          
-          updateContentBox('v-objetivo', data.objetivo);
-          updateContentBox('v-motivo', data.motivo);
-          updateContentBox('v-acuerdos', data.acuerdos);
-          updateContentBox('v-obs', data.obs);
-          
-          statusText.textContent = "Visualizando en vivo";
+        const contentType = res.headers.get('Content-Type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error("Server did not return JSON (probably HTML SPA fallback)");
+        }
+        
+        const data = await res.json();
+        handleData(data);
+      } catch (err) {
+        console.warn("Local server multivista failed, falling back to Supabase:", err);
+        useSupabaseFallback = true;
+        await fetchFromSupabase();
+      }
+    }
+
+    async function fetchFromSupabase() {
+      const SUPABASE_URL = "https://squfklurqnnoujcmvxjh.supabase.co";
+      const SUPABASE_ANON_KEY = "sb_publishable_i7ruBqqrqr4ro8YywVk0sQ_VhvY_R-m";
+      
+      const headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json'
+      };
+      
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/entrevistas?id=eq.${encodeURIComponent(session)}`, { headers });
+        if (!res.ok) throw new Error("Supabase request failed");
+        const data = await res.json();
+        if (data && data.length > 0) {
+          const row = data[0];
+          const payload = {
+            sessionId: row.id,
+            rut: row.rut,
+            nombre: row.nombre,
+            cargo: row.cargo,
+            curso: row.curso,
+            jefe: row.jefe,
+            asig: row.asig,
+            pie: row.pie,
+            fecha: row.fecha,
+            hora: row.hora,
+            resp: row.resp,
+            estado: row.estado,
+            seguimiento: row.seguimiento,
+            objetivo: row.objetivo,
+            motivo: row.motivo,
+            acuerdos: row.acuerdos,
+            obs: row.obs
+          };
+          handleData(payload);
         } else {
-          statusText.textContent = "Esperando sesión...";
+          handleData({});
         }
       } catch (err) {
-        console.error("Error fetching live state:", err);
+        console.error("Error fetching from Supabase:", err);
         statusText.textContent = "Error de conexión";
+      }
+    }
+
+    function handleData(data) {
+      if (data && data.sessionId) {
+        updateField('v-nombre', data.nombre);
+        updateField('v-rut', data.rut);
+        updateField('v-curso', `${data.cargo || ''} - ${data.curso || ''}`);
+        updateField('v-cita', `${data.fecha || ''} ${data.hora || ''} (con ${data.resp || 'responsable'})`);
+        
+        updateContentBox('v-objetivo', data.objetivo);
+        updateContentBox('v-motivo', data.motivo);
+        updateContentBox('v-acuerdos', data.acuerdos);
+        updateContentBox('v-obs', data.obs);
+        
+        statusText.textContent = "Visualizando en vivo";
+      } else {
+        statusText.textContent = "Esperando sesión...";
       }
     }
 

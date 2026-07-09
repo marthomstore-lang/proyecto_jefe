@@ -24,6 +24,50 @@ window.fetch = async function(url, options = {}) {
     };
     
     try {
+      if (path === '/api/multivista/info' && method === 'GET') {
+        if (!multiviewSessionId) {
+          multiviewSessionId = 'MVT-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+        return mockResponse({
+          url: `${window.location.origin}/multiview.html?session=${multiviewSessionId}`
+        });
+      }
+      
+      if (path === '/api/multivista/update' && method === 'POST') {
+        const body = JSON.parse(options.body);
+        const sessionId = body.sessionId;
+        const dbBody = {
+          id: sessionId,
+          rut: body.rut || '',
+          nombre: body.nombre || '',
+          cargo: body.cargo || '',
+          curso: body.curso || '',
+          jefe: body.jefe || '',
+          asig: body.asig || '',
+          pie: body.pie || '',
+          fecha: body.fecha || '',
+          hora: body.hora || '',
+          resp: body.resp || '',
+          estado: 'TRANSMISION',
+          seguimiento: body.seguimiento || '',
+          objetivo: body.objetivo || '',
+          motivo: body.motivo || '',
+          acuerdos: body.acuerdos || '',
+          obs: body.obs || ''
+        };
+        const res = await originalFetch(`${SUPABASE_URL}/rest/v1/entrevistas`, {
+          method: 'POST',
+          headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify(dbBody)
+        });
+        if (res.ok) {
+          return mockResponse({ success: true });
+        } else {
+          const errData = await res.json();
+          return mockResponse({ success: false, error: errData.message || 'Error al actualizar transmisión en Supabase' });
+        }
+      }
+
       if (path === '/api/login' && method === 'POST') {
         const body = JSON.parse(options.body);
         const u = body.username.trim().toLowerCase();
@@ -49,7 +93,11 @@ window.fetch = async function(url, options = {}) {
       
       if (path === '/api/stats' && method === 'GET') {
         const fetchCount = async (table) => {
-          const res = await originalFetch(`${SUPABASE_URL}/rest/v1/${table}?select=count`, {
+          let url = `${SUPABASE_URL}/rest/v1/${table}?select=count`;
+          if (table === 'entrevistas') {
+            url += `&id=not.like.MVT-%25`;
+          }
+          const res = await originalFetch(url, {
             headers: { ...headers, 'Prefer': 'count=exact' }
           });
           const contentRange = res.headers.get('Content-Range');
@@ -213,6 +261,9 @@ window.fetch = async function(url, options = {}) {
           
           const res = await originalFetch(sbUrl, { headers });
           let rows = await res.json();
+          if (Array.isArray(rows) && sbTable === 'entrevistas') {
+            rows = rows.filter(r => !r.id || !r.id.startsWith('MVT-'));
+          }
           
           const frontendRows = rows.map(r => {
             const mappedRow = {};
@@ -1988,10 +2039,15 @@ async function abrirMultivistaModal() {
   try {
     const res = await fetch('/api/multivista/info');
     const info = await res.json();
-    const localIp = info.ip || 'localhost';
-    const port = info.port || 8080;
     
-    const url = `http://${localIp}:${port}/multiview.html?session=${multiviewSessionId}`;
+    let url;
+    if (info.url) {
+      url = info.url;
+    } else {
+      const localIp = info.ip || 'localhost';
+      const port = info.port || 8080;
+      url = `http://${localIp}:${port}/multiview.html?session=${multiviewSessionId}`;
+    }
     
     document.getElementById('multivista-link').value = url;
     document.getElementById('multivista-qr').innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}" alt="Código QR" style="max-width:100%; height:auto; display:block;">`;
