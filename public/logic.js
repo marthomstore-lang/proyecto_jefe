@@ -559,32 +559,57 @@ function toggleSidebar() {
 }
 
 function goTo(page) {
+  const [pageName, queryString] = page.split('?');
+  
+  // Guardar la página previa en sessionStorage (si no es reporte)
+  if (pageName !== 'reporte') {
+    sessionStorage.setItem('campanario_prev_page', pageName);
+  }
+  
+  // Sincronizar hash en la barra de direcciones
+  if (window.location.hash !== '#' + page) {
+    window.location.hash = page;
+  }
+  
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   
-  const pg = document.getElementById('pg-' + page);
+  const pg = document.getElementById('pg-' + pageName);
   if (pg) pg.classList.add('active');
   
   document.querySelectorAll('.nav-item').forEach(n => {
-    if (n.getAttribute('onclick') && n.getAttribute('onclick').includes("'" + page + "'")) {
+    if (n.getAttribute('onclick') && n.getAttribute('onclick').includes("'" + pageName + "'")) {
       n.classList.add('active');
     }
   });
   
   if (window.innerWidth <= 1024) {
-    document.getElementById('sidebar').classList.remove('open');
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) sidebar.classList.remove('open');
     sidebarOpen = false;
   }
   
   window.scrollTo({ top: 0, behavior: 'smooth' });
   
-  if (page === 'inicio') { buscarGlobal(); loadAllData(); }
-  if (page === 'estudiantes') { initEstFiltros(); filtrarEst(); populateProfesorJefeDropdowns(); }
-  if (page === 'docentes') { initDocFiltros(); filtrarDoc(); }
-  if (page === 'asistentes') { initAsiFiltros(); filtrarAsi(); }
-  if (page === 'historial') { filtrarHistorial(); }
-  if (page === 'administracion') { renderAdmin(); }
-  if (page === 'configuracion') { renderConfiguracion(); }
+  if (pageName === 'inicio') { buscarGlobal(); loadAllData(); }
+  if (pageName === 'estudiantes') { initEstFiltros(); filtrarEst(); populateProfesorJefeDropdowns(); }
+  if (pageName === 'docentes') { initDocFiltros(); filtrarDoc(); }
+  if (pageName === 'asistentes') { initAsiFiltros(); filtrarAsi(); }
+  if (pageName === 'historial') { filtrarHistorial(); }
+  if (pageName === 'administracion') { renderAdmin(); }
+  if (pageName === 'configuracion') { renderConfiguracion(); }
+  
+  if (pageName === 'reporte') {
+    const params = new URLSearchParams(queryString || '');
+    const id = params.get('id');
+    const ids = params.get('ids');
+    const print = params.get('print') === '1';
+    if (id) {
+      cargarReporteDesdeHash(id, print);
+    } else if (ids) {
+      cargarMultiplesReportesDesdeHash(ids.split(','), print);
+    }
+  }
 }
 
 // ══ TOAST ══
@@ -1764,38 +1789,8 @@ async function verificarAccesoEntrevista(e) {
   return await mostrarPromptConfidencial(meta.creador);
 }
 
-async function verReporte(id) {
-  let e = entrevistas.find(x => x.id === id);
-  if (!e) {
-    try {
-      const res = await fetch(`/api/entrevistas?q=${encodeURIComponent(id)}`);
-      const list = await res.json();
-      e = list.find(x => x.id === id);
-    } catch(err) {
-      console.error("Error fetching single interview:", err);
-    }
-  }
-  if (!e) return;
-  
-  const tieneAcceso = await verificarAccesoEntrevista(e);
-  if (!tieneAcceso) return;
-  
-  document.getElementById('reporte').innerHTML = generarHtmlReporte(e, true);
-  
-  const rptTitle = document.querySelector('#pg-reporte .card-title');
-  if (rptTitle) {
-    rptTitle.textContent = '📄 Vista de Ficha Oficial de Entrevista';
-  }
-  
-  const backBtn = document.querySelector('#pg-reporte .btn-secondary');
-  if (backBtn) {
-    const currentActivePage = document.querySelector('.page.active');
-    const backTo = (currentActivePage && currentActivePage.id === 'pg-nueva-entrevista') ? 'nueva-entrevista' : 'historial';
-    backBtn.textContent = backTo === 'nueva-entrevista' ? '⬅ Volver a Formulario' : '⬅ Volver a Historial';
-    backBtn.onclick = () => goTo(backTo);
-  }
-  
-  goTo('reporte');
+function verReporte(id) {
+  window.location.hash = 'reporte?id=' + id;
 }
 
 async function cargarEntrevistaParaEditar(id) {
@@ -2341,7 +2336,16 @@ setTimeout(() => {
   loadAllData();
   buscarGlobal();
   bindRutMasks();
-}, 200);
+  
+  // Navegar a la página inicial cargada en el hash
+  const initialPage = window.location.hash.slice(1) || 'inicio';
+  goTo(initialPage);
+}, 250);
+
+window.addEventListener('hashchange', () => {
+  const hash = window.location.hash.slice(1) || 'inicio';
+  goTo(hash);
+});
 
 async function cargarHistorialCita(rut) {
   const card = document.getElementById('e-historial-card');
@@ -2683,6 +2687,69 @@ function imprimirSeleccionadas() {
 }
 
 function imprimirListaDeEntrevistas(list) {
+  const ids = list.map(e => e.id).join(',');
+  window.location.hash = 'reporte?ids=' + ids + '&print=1';
+}
+
+function imprimirReporteIndividual(id) {
+  window.location.hash = 'reporte?id=' + id + '&print=1';
+}
+
+async function cargarReporteDesdeHash(id, print) {
+  let e = entrevistas.find(x => x.id === id);
+  if (!e) {
+    try {
+      const res = await fetch(`/api/entrevistas`);
+      const list = await res.json();
+      e = list.find(x => x.id === id);
+    } catch(err) {
+      console.error("Error loading single interview details:", err);
+    }
+  }
+  if (!e) {
+    toast("❌ No se encontró la entrevista " + id);
+    return;
+  }
+  
+  const tieneAcceso = await verificarAccesoEntrevista(e);
+  if (!tieneAcceso) return;
+  
+  document.getElementById('reporte').innerHTML = generarHtmlReporte(e, true);
+  
+  const rptTitle = document.querySelector('#pg-reporte .card-title');
+  if (rptTitle) {
+    rptTitle.textContent = '📄 Vista de Ficha Oficial de Entrevista';
+  }
+  
+  const backBtn = document.querySelector('#pg-reporte .btn-secondary');
+  if (backBtn) {
+    const backTo = sessionStorage.getItem('campanario_prev_page') || 'historial';
+    backBtn.textContent = backTo === 'nueva-entrevista' ? '⬅ Volver a Formulario' : '⬅ Volver a Historial';
+    backBtn.onclick = () => goTo(backTo);
+  }
+  
+  if (print) {
+    setTimeout(() => {
+      window.print();
+    }, 300);
+  }
+}
+
+async function cargarMultiplesReportesDesdeHash(idsList, print) {
+  let list = [];
+  try {
+    const res = await fetch(`/api/entrevistas`);
+    const all = await res.json();
+    list = all.filter(x => idsList.includes(x.id));
+  } catch(err) {
+    console.error("Error loading multiple interviews:", err);
+  }
+  
+  if (list.length === 0) {
+    toast("❌ No se encontraron las entrevistas seleccionadas");
+    return;
+  }
+  
   list.sort((a, b) => b.id.localeCompare(a.id));
   
   let html = '';
@@ -2703,48 +2770,15 @@ function imprimirListaDeEntrevistas(list) {
   
   const backBtn = document.querySelector('#pg-reporte .btn-secondary');
   if (backBtn) {
-    backBtn.textContent = '⬅ Volver a Historial';
-    backBtn.onclick = () => goTo('historial');
-  }
-  
-  goTo('reporte');
-}
-
-async function imprimirReporteIndividual(id) {
-  let e = entrevistas.find(x => x.id === id);
-  if (!e) {
-    try {
-      const res = await fetch(`/api/entrevistas?q=${encodeURIComponent(id)}`);
-      const list = await res.json();
-      e = list.find(x => x.id === id);
-    } catch(err) {
-      console.error("Error fetching single interview:", err);
-    }
-  }
-  if (!e) return;
-  
-  const tieneAcceso = await verificarAccesoEntrevista(e);
-  if (!tieneAcceso) return;
-  
-  document.getElementById('reporte').innerHTML = generarHtmlReporte(e, true);
-  
-  const rptTitle = document.querySelector('#pg-reporte .card-title');
-  if (rptTitle) {
-    rptTitle.textContent = '📄 Vista de Ficha Oficial de Entrevista';
-  }
-  
-  const backBtn = document.querySelector('#pg-reporte .btn-secondary');
-  if (backBtn) {
-    const currentActivePage = document.querySelector('.page.active');
-    const backTo = (currentActivePage && currentActivePage.id === 'pg-nueva-entrevista') ? 'nueva-entrevista' : 'historial';
+    const backTo = sessionStorage.getItem('campanario_prev_page') || 'historial';
     backBtn.textContent = backTo === 'nueva-entrevista' ? '⬅ Volver a Formulario' : '⬅ Volver a Historial';
     backBtn.onclick = () => goTo(backTo);
   }
   
-  goTo('reporte');
-  
-  setTimeout(() => {
-    window.print();
-  }, 300);
+  if (print) {
+    setTimeout(() => {
+      window.print();
+    }, 300);
+  }
 }
 
