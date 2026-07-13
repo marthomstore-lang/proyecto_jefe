@@ -1701,6 +1701,7 @@ async function filtrarHistorial() {
             <td colspan="2">
               <div style="display:flex; gap:4px; justify-content: flex-end;">
                 <button class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')">📄 Ver</button>
+                <button class="btn btn-sm btn-secondary" onclick="cargarEntrevistaParaEditar('${esc(e.id)}')">✏️ Editar</button>
                 <button class="btn btn-sm btn-danger" onclick="eliminarEnt('${esc(e.id)}')">✖</button>
               </div>
             </td>
