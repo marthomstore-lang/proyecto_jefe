@@ -3014,17 +3014,22 @@ async function verificarNotificaciones() {
   const activeUser = sessionStorage.getItem('campanario_user');
   const banner = document.getElementById('notif-banner');
   const bannerText = document.getElementById('notif-banner-text');
-  if (!activeUser || !banner) return;
+  const badge = document.getElementById('header-notif-badge');
+  if (!activeUser) return;
   
   try {
     const res = await fetch(`/api/usuarios/notificaciones?username=${encodeURIComponent(activeUser)}`);
     const list = await res.json();
     
     if (list.length === 0) {
-      banner.style.display = 'none';
+      if (banner) banner.style.display = 'none';
+      if (badge) badge.style.display = 'none';
     } else {
-      banner.style.display = 'block';
-      bannerText.textContent = `Tienes ${list.length} ${list.length === 1 ? 'invitación pendiente' : 'invitaciones pendientes'} para aportar en entrevistas de estudiantes.`;
+      if (banner) {
+        banner.style.display = 'block';
+        bannerText.textContent = `Tienes ${list.length} ${list.length === 1 ? 'invitación pendiente' : 'invitaciones pendientes'} para aportar en entrevistas de estudiantes.`;
+      }
+      if (badge) badge.style.display = 'block';
     }
   } catch(err) {
     console.error("Error checking notifications:", err);
