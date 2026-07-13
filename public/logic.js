@@ -1765,7 +1765,16 @@ async function verificarAccesoEntrevista(e) {
 }
 
 async function verReporte(id) {
-  const e = entrevistas.find(x => x.id === id);
+  let e = entrevistas.find(x => x.id === id);
+  if (!e) {
+    try {
+      const res = await fetch(`/api/entrevistas?q=${encodeURIComponent(id)}`);
+      const list = await res.json();
+      e = list.find(x => x.id === id);
+    } catch(err) {
+      console.error("Error fetching single interview:", err);
+    }
+  }
   if (!e) return;
   
   const tieneAcceso = await verificarAccesoEntrevista(e);
@@ -1780,8 +1789,10 @@ async function verReporte(id) {
   
   const backBtn = document.querySelector('#pg-reporte .btn-secondary');
   if (backBtn) {
-    backBtn.textContent = '⬅ Volver a Historial';
-    backBtn.onclick = () => goTo('historial');
+    const currentActivePage = document.querySelector('.page.active');
+    const backTo = (currentActivePage && currentActivePage.id === 'pg-nueva-entrevista') ? 'nueva-entrevista' : 'historial';
+    backBtn.textContent = backTo === 'nueva-entrevista' ? '⬅ Volver a Formulario' : '⬅ Volver a Historial';
+    backBtn.onclick = () => goTo(backTo);
   }
   
   goTo('reporte');
@@ -2365,6 +2376,7 @@ async function cargarHistorialCita(rut) {
             <td>
               <div style="display:flex;gap:4px">
                 <button type="button" class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')">📄 Ver</button>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="imprimirReporteIndividual('${esc(e.id)}')">🖨️ Imprimir</button>
                 ${esActual ? '<span style="color:var(--text-muted);font-size:12px;padding:4px 8px;font-style:italic;">Editando</span>' : ''}
               </div>
             </td>
@@ -2696,5 +2708,43 @@ function imprimirListaDeEntrevistas(list) {
   }
   
   goTo('reporte');
+}
+
+async function imprimirReporteIndividual(id) {
+  let e = entrevistas.find(x => x.id === id);
+  if (!e) {
+    try {
+      const res = await fetch(`/api/entrevistas?q=${encodeURIComponent(id)}`);
+      const list = await res.json();
+      e = list.find(x => x.id === id);
+    } catch(err) {
+      console.error("Error fetching single interview:", err);
+    }
+  }
+  if (!e) return;
+  
+  const tieneAcceso = await verificarAccesoEntrevista(e);
+  if (!tieneAcceso) return;
+  
+  document.getElementById('reporte').innerHTML = generarHtmlReporte(e, true);
+  
+  const rptTitle = document.querySelector('#pg-reporte .card-title');
+  if (rptTitle) {
+    rptTitle.textContent = '📄 Vista de Ficha Oficial de Entrevista';
+  }
+  
+  const backBtn = document.querySelector('#pg-reporte .btn-secondary');
+  if (backBtn) {
+    const currentActivePage = document.querySelector('.page.active');
+    const backTo = (currentActivePage && currentActivePage.id === 'pg-nueva-entrevista') ? 'nueva-entrevista' : 'historial';
+    backBtn.textContent = backTo === 'nueva-entrevista' ? '⬅ Volver a Formulario' : '⬅ Volver a Historial';
+    backBtn.onclick = () => goTo(backTo);
+  }
+  
+  goTo('reporte');
+  
+  setTimeout(() => {
+    window.print();
+  }, 300);
 }
 
