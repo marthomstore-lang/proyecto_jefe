@@ -275,10 +275,33 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
         cursor = get_db_cursor(conn)
         
         try:
-            # ── LISTADO DE USUARIOS ──
             if path == '/api/usuarios':
                 cursor.execute("SELECT * FROM usuarios")
                 self.send_json([dict(row) for row in cursor.fetchall()])
+                return
+
+            elif path == '/api/entrevistas/participantes':
+                entrevista_id = query.get('entrevista_id', [''])[0].strip()
+                cursor.execute("""
+                    SELECT p.*, u.nombre as nombre_completo, u.perfil as perfil 
+                    FROM participantes_entrevista p
+                    LEFT JOIN usuarios u ON p.username = u.username
+                    WHERE p.entrevista_id = ?
+                """, (entrevista_id,))
+                rows = cursor.fetchall()
+                self.send_json([dict(row) for row in rows])
+                return
+
+            elif path == '/api/usuarios/notificaciones':
+                username = query.get('username', [''])[0].strip()
+                cursor.execute("""
+                    SELECT p.*, e.nombre as estudiante_nombre, e.objetivo as objetivo, e.fecha as fecha, e.resp as entrevistador
+                    FROM participantes_entrevista p
+                    JOIN entrevistas e ON p.entrevista_id = e.id
+                    WHERE p.username = ? AND p.visto = 0
+                """, (username,))
+                rows = cursor.fetchall()
+                self.send_json([dict(row) for row in rows])
                 return
 
             # ── 1. ESTADÍSTICAS INSTITUCIONALES ──
@@ -542,6 +565,101 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 self.send_json({"success": True})
             else:
                 self.send_json({"success": False, "error": "Invalid or missing sessionId"}, status=400)
+            return
+
+        elif path == '/api/entrevistas/participantes/invitar':
+            entrevista_id = body.get("entrevistaId")
+            username = body.get("username")
+            if not entrevista_id or not username:
+                self.send_json({"success": False, "error": "Missing parameters"}, status=400)
+                return
+            
+            import uuid
+            conn = get_db_connection()
+            cursor = get_db_cursor(conn)
+            try:
+                cursor.execute("SELECT COUNT(*) FROM participantes_entrevista WHERE entrevista_id = ? AND username = ?", (entrevista_id, username))
+                count = cursor.fetchone()[0]
+                if count > 0:
+                    self.send_json({"success": True, "message": "Already invited"})
+                    return
+                
+                uid = uuid.uuid4().hex
+                cursor.execute("""
+                    INSERT INTO participantes_entrevista (id, entrevista_id, username, estado, comentario, fecha_comentario, visto)
+                    VALUES (?, ?, ?, 'PENDIENTE', '', '', 0)
+                """, (uid, entrevista_id, username))
+                conn.commit()
+                self.send_json({"success": True})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)}, status=500)
+            finally:
+                release_db_connection(conn)
+            return
+
+        elif path == '/api/entrevistas/participantes/comentar':
+            entrevista_id = body.get("entrevistaId")
+            username = body.get("username")
+            comentario = body.get("comentario", "").strip()
+            if not entrevista_id or not username or not comentario:
+                self.send_json({"success": False, "error": "Missing parameters"}, status=400)
+                return
+            
+            from datetime import date
+            today_str = date.today().isoformat()
+            
+            conn = get_db_connection()
+            cursor = get_db_cursor(conn)
+            try:
+                cursor.execute("""
+                    UPDATE participantes_entrevista 
+                    SET estado = 'COMENTADO', comentario = ?, fecha_comentario = ?, visto = 1 
+                    WHERE entrevista_id = ? AND username = ?
+                """, (comentario, today_str, entrevista_id, username))
+                conn.commit()
+                self.send_json({"success": True})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)}, status=500)
+            finally:
+                release_db_connection(conn)
+            return
+
+        elif path == '/api/usuarios/notificaciones/leer':
+            entrevista_id = body.get("entrevistaId")
+            username = body.get("username")
+            if not entrevista_id or not username:
+                self.send_json({"success": False, "error": "Missing parameters"}, status=400)
+                return
+            
+            conn = get_db_connection()
+            cursor = get_db_cursor(conn)
+            try:
+                cursor.execute("UPDATE participantes_entrevista SET visto = 1 WHERE entrevista_id = ? AND username = ?", (entrevista_id, username))
+                conn.commit()
+                self.send_json({"success": True})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)}, status=500)
+            finally:
+                release_db_connection(conn)
+            return
+
+        elif path == '/api/entrevistas/participantes/recordar':
+            entrevista_id = body.get("entrevistaId")
+            username = body.get("username")
+            if not entrevista_id or not username:
+                self.send_json({"success": False, "error": "Missing parameters"}, status=400)
+                return
+            
+            conn = get_db_connection()
+            cursor = get_db_cursor(conn)
+            try:
+                cursor.execute("UPDATE participantes_entrevista SET visto = 0 WHERE entrevista_id = ? AND username = ?", (entrevista_id, username))
+                conn.commit()
+                self.send_json({"success": True})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)}, status=500)
+            finally:
+                release_db_connection(conn)
             return
 
         conn = get_db_connection()
@@ -869,6 +987,17 @@ def run_server():
             nombre TEXT,
             password TEXT,
             perfil TEXT
+        )
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS participantes_entrevista (
+            id TEXT PRIMARY KEY,
+            entrevista_id TEXT,
+            username TEXT,
+            estado TEXT DEFAULT 'PENDIENTE',
+            comentario TEXT DEFAULT '',
+            fecha_comentario TEXT DEFAULT '',
+            visto INTEGER DEFAULT 0
         )
         """)
         conn.commit()

@@ -1867,6 +1867,13 @@ async function cargarEntrevistaParaEditarDirecto(id) {
   if (btnSave) btnSave.innerHTML = '💾 Actualizar entrevista';
   
   cargarHistorialCita(e.rut);
+  
+  // Mostrar la tarjeta de participantes e inicializar sus datos
+  const partCard = document.getElementById('e-participantes-card');
+  if (partCard) partCard.style.display = 'block';
+  cargarUsuariosInviteSelect();
+  cargarParticipantesEdit(id);
+  
   toast(`✏️ Cargada entrevista ${id} para edición`);
 }
 
@@ -2070,6 +2077,7 @@ async function login() {
         loadAllData();
         buscarGlobal();
         bindRutMasks();
+        verificarNotificaciones();
       }, 100);
     } else {
       const err = document.getElementById('login-error');
@@ -2370,6 +2378,7 @@ setTimeout(() => {
   loadAllData();
   buscarGlobal();
   bindRutMasks();
+  verificarNotificaciones();
   
   // Navegar a la página inicial cargada en el hash
   const initialPage = window.location.hash.slice(1) || 'inicio';
@@ -2529,7 +2538,7 @@ function tieneAccesoSilencioso(e) {
   return currentUser === meta.creador;
 }
 
-function generarHtmlReporte(e, tieneAcceso) {
+function generarHtmlReporte(e, tieneAcceso, participantes = []) {
   const meta = parseObsMetadata(e.obs);
   const id = esc(e.id || '');
   const fecha = esc(e.fecha || '') + ' ' + esc(e.hora || '');
@@ -2636,6 +2645,29 @@ function generarHtmlReporte(e, tieneAcceso) {
         <div class="rpt-cell rpt-label last-row">Observaciones Generales</div>
         <div class="rpt-cell last-row" style="min-height:48px; line-height: 1.4">${obs}</div>
       </div>
+      
+      ${(() => {
+        const commentedParts = (participantes || []).filter(p => p.estado === 'COMENTADO');
+        if (commentedParts.length === 0) return '';
+        return `
+          <div style="margin-top: 20px; border: 1px solid var(--border, #e2e8f0); border-radius: var(--radius-sm, 8px); background: #fafafc; padding: 16px;">
+            <h4 style="font-size: 13px; font-weight: 700; color: var(--text-primary, #0f172a); margin: 0 0 12px 0; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">👥 Aportes y Comentarios de Participantes</h4>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              ${commentedParts.map(p => `
+                <div style="background: #ffffff; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12.5px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <strong style="color: var(--primary, #4f46e5);">${esc(p.nombre_completo || p.username)} (${esc(p.perfil || 'Docente')})</strong>
+                    <span style="color: var(--text-muted, #64748b); font-size: 11px;">📅 ${esc(p.fecha_comentario)}</span>
+                  </div>
+                  <p style="margin: 0; color: var(--text-secondary, #334155); font-style: italic;">
+                    "${esc(p.comentario)}"
+                  </p>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      })()}
       
       <div class="firma-row">
         <div>
@@ -2748,7 +2780,15 @@ async function cargarReporteDesdeHash(id, print) {
   const tieneAcceso = await verificarAccesoEntrevista(e);
   if (!tieneAcceso) return;
   
-  document.getElementById('reporte').innerHTML = generarHtmlReporte(e, true);
+  let participantes = [];
+  try {
+    const res = await fetch(`/api/entrevistas/participantes?entrevista_id=${encodeURIComponent(id)}`);
+    participantes = await res.json();
+  } catch(err) {
+    console.error("Error loading participants:", err);
+  }
+  
+  document.getElementById('reporte').innerHTML = generarHtmlReporte(e, true, participantes);
   
   const rptTitle = document.querySelector('#pg-reporte .card-title');
   if (rptTitle) {
@@ -2787,13 +2827,23 @@ async function cargarMultiplesReportesDesdeHash(idsList, print) {
   list.sort((a, b) => b.id.localeCompare(a.id));
   
   let html = '';
-  list.forEach((e, idx) => {
+  for (let idx = 0; idx < list.length; idx++) {
+    const e = list[idx];
     const tieneAcceso = tieneAccesoSilencioso(e);
-    html += generarHtmlReporte(e, tieneAcceso);
+    
+    let participantes = [];
+    try {
+      const res = await fetch(`/api/entrevistas/participantes?entrevista_id=${encodeURIComponent(e.id)}`);
+      participantes = await res.json();
+    } catch(err) {
+      console.error("Error loading participants for multiple report:", err);
+    }
+    
+    html += generarHtmlReporte(e, tieneAcceso, participantes);
     if (idx < list.length - 1) {
       html += '<div class="report-block-separator no-print" style="margin: 40px 0; border-top: 2px dashed #cbd5e1; height: 1px;"></div>';
     }
-  });
+  }
   
   document.getElementById('reporte').innerHTML = html;
   
@@ -2842,6 +2892,250 @@ async function terminarTransmisionMultivista(sessionId) {
     });
   } catch(err) {
     console.error("Error deleting Supabase multivista session:", err);
+  }
+}
+
+async function cargarUsuariosInviteSelect() {
+  const select = document.getElementById('e-invite-select');
+  if (!select) return;
+  
+  try {
+    const res = await fetch('/api/usuarios');
+    const users = await res.json();
+    const currentUser = sessionStorage.getItem('campanario_user');
+    
+    // Filtrar al usuario actual para que no se invite a sí mismo
+    const otherUsers = users.filter(u => u.username !== currentUser);
+    
+    select.innerHTML = '<option value="">-- Seleccione un colega --</option>' + 
+      otherUsers.map(u => `<option value="${esc(u.username)}">${esc(u.nombre)} (${esc(u.perfil)})</option>`).join('');
+  } catch(err) {
+    console.error("Error loading users for invite select:", err);
+  }
+}
+
+async function cargarParticipantesEdit(entrevistaId) {
+  const tbody = document.querySelector('#tbl-e-participantes tbody');
+  if (!tbody) return;
+  
+  try {
+    const res = await fetch(`/api/entrevistas/participantes?entrevista_id=${encodeURIComponent(entrevistaId)}`);
+    const list = await res.json();
+    
+    if (list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:16px;">No hay participantes invitados aún.</td></tr>';
+      return;
+    }
+    
+    tbody.innerHTML = list.map(p => {
+      const badgeClass = p.estado === 'COMENTADO' ? 'badge-verde' : 'badge-amarillo';
+      const badgeStyle = p.estado === 'COMENTADO' ? 'background: rgba(16, 185, 129, 0.1); color: #10b981;' : 'background: rgba(245, 158, 11, 0.1); color: #f59e0b;';
+      const commentText = p.comentario ? `"${esc(p.comentario)}" <span style="font-size:11px; color:var(--text-muted); display: block; margin-top: 4px;">📅 ${esc(p.fecha_comentario)}</span>` : '<span style="font-style:italic; color:var(--text-muted);">Sin aportes aún</span>';
+      
+      let actionBtn = '';
+      if (p.estado === 'PENDIENTE') {
+        actionBtn = `<button type="button" class="btn btn-sm btn-secondary" onclick="recordarParticipante('${esc(p.username)}')">🔔 Recordar</button>`;
+      } else {
+        actionBtn = `<span style="font-size:12px; color:var(--text-muted); font-style:italic;">Completado</span>`;
+      }
+      
+      return `
+        <tr>
+          <td><strong>${esc(p.nombre_completo || p.username)}</strong><br><span style="font-size:11px; color:var(--text-muted)">@${esc(p.username)}</span></td>
+          <td style="font-size:13px; color:var(--text-secondary)">${esc(p.perfil || 'Docente')}</td>
+          <td><span class="badge ${badgeClass}" style="${badgeStyle}">${esc(p.estado)}</span></td>
+          <td style="font-size:13px; max-width:300px; line-height: 1.4">${commentText}</td>
+          <td style="text-align: right;">${actionBtn}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch(err) {
+    console.error("Error loading participants table:", err);
+  }
+}
+
+async function invitarParticipante() {
+  const select = document.getElementById('e-invite-select');
+  if (!select) return;
+  const username = select.value;
+  if (!username) {
+    toast("⚠️ Seleccione un usuario para invitar");
+    return;
+  }
+  
+  if (!editandoEntrevistaId) {
+    toast("⚠️ Guarde la entrevista primero antes de poder invitar participantes");
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/entrevistas/participantes/invitar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entrevistaId: editandoEntrevistaId, username })
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast("✅ Participante invitado con éxito");
+      select.value = '';
+      cargarParticipantesEdit(editandoEntrevistaId);
+    } else {
+      toast("❌ Error: " + data.error);
+    }
+  } catch(err) {
+    console.error("Error inviting participant:", err);
+    toast("❌ Error de conexión");
+  }
+}
+
+async function recordarParticipante(username) {
+  if (!editandoEntrevistaId) return;
+  
+  try {
+    const res = await fetch('/api/entrevistas/participantes/recordar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entrevistaId: editandoEntrevistaId, username })
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast(`🔔 Recordatorio enviado a @${username}`);
+      cargarParticipantesEdit(editandoEntrevistaId);
+    } else {
+      toast("❌ Error: " + data.error);
+    }
+  } catch(err) {
+    console.error("Error sending reminder:", err);
+    toast("❌ Error de conexión");
+  }
+}
+
+async function verificarNotificaciones() {
+  const activeUser = sessionStorage.getItem('campanario_user');
+  const banner = document.getElementById('notif-banner');
+  const bannerText = document.getElementById('notif-banner-text');
+  if (!activeUser || !banner) return;
+  
+  try {
+    const res = await fetch(`/api/usuarios/notificaciones?username=${encodeURIComponent(activeUser)}`);
+    const list = await res.json();
+    
+    if (list.length === 0) {
+      banner.style.display = 'none';
+    } else {
+      banner.style.display = 'block';
+      bannerText.textContent = `Tienes ${list.length} ${list.length === 1 ? 'invitación pendiente' : 'invitaciones pendientes'} para aportar en entrevistas de estudiantes.`;
+    }
+  } catch(err) {
+    console.error("Error checking notifications:", err);
+  }
+}
+
+async function abrirModalNotificaciones() {
+  const activeUser = sessionStorage.getItem('campanario_user');
+  const container = document.getElementById('notif-list-container');
+  const modal = document.getElementById('modal-notificaciones');
+  if (!activeUser || !container || !modal) return;
+  
+  try {
+    const res = await fetch(`/api/usuarios/notificaciones?username=${encodeURIComponent(activeUser)}`);
+    const list = await res.json();
+    
+    if (list.length === 0) {
+      container.innerHTML = '<div style="text-align:center; color:var(--text-muted); padding:16px;">No tienes invitaciones pendientes.</div>';
+      setTimeout(() => cerrarModalNotificaciones(), 1500);
+      return;
+    }
+    
+    container.innerHTML = list.map(item => `
+      <div class="card" style="border: 1px solid var(--border, #e2e8f0); padding: 16px; margin: 0; box-shadow: none; display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 4px;">
+          <div>
+            <strong style="font-size: 14px; color: var(--text-primary);">${esc(item.estudiante_nombre)}</strong>
+            <div style="font-size: 11px; color: var(--text-muted);">Por: ${esc(item.entrevistador)} el ${esc(item.fecha)}</div>
+          </div>
+          <span class="badge badge-amarillo" style="font-size: 11px; background: rgba(245, 158, 11, 0.1); color: #f59e0b; padding: 2px 8px; border-radius: 999px;">Pendiente</span>
+        </div>
+        <p style="font-size: 13px; margin: 0; color: var(--text-secondary); line-height: 1.4;">
+          <strong style="font-size:11px; text-transform:uppercase; color:var(--text-muted)">Objetivo:</strong> ${esc(item.objetivo)}
+        </p>
+        <div class="form-group" style="margin: 6px 0 0 0;">
+          <label style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Escribe tu aporte o comentario</label>
+          <textarea id="notif-comentario-${item.entrevista_id}" placeholder="Escribe aquí las observaciones, acuerdos o aportes..." style="width: 100%; box-sizing: border-box; margin-top: 6px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; height: 60px; resize: vertical;"></textarea>
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px;">
+          <button class="btn btn-sm btn-secondary" style="padding: 6px 12px; font-size:12px;" onclick="descartarNotificacion('${esc(item.entrevista_id)}')">Descartar</button>
+          <button class="btn btn-sm btn-primary" style="padding: 6px 16px; font-size:12px;" onclick="guardarAporteNotificacion('${esc(item.entrevista_id)}')">💾 Enviar Aporte</button>
+        </div>
+      </div>
+    `).join('');
+    
+    modal.classList.add('open');
+  } catch(err) {
+    console.error("Error opening notifications modal:", err);
+  }
+}
+
+function cerrarModalNotificaciones() {
+  const modal = document.getElementById('modal-notificaciones');
+  if (modal) modal.classList.remove('open');
+  verificarNotificaciones();
+}
+
+async function guardarAporteNotificacion(entrevistaId) {
+  const activeUser = sessionStorage.getItem('campanario_user');
+  const txtarea = document.getElementById(`notif-comentario-${entrevistaId}`);
+  if (!activeUser || !txtarea) return;
+  
+  const comentario = txtarea.value.trim();
+  if (!comentario) {
+    toast("⚠️ Escribe un aporte o comentario antes de enviar");
+    return;
+  }
+  
+  try {
+    const resCom = await fetch('/api/entrevistas/participantes/comentar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entrevistaId, username: activeUser, comentario })
+    });
+    const dataCom = await resCom.json();
+    
+    if (dataCom.success) {
+      toast("✅ Aporte enviado con éxito");
+      abrirModalNotificaciones();
+      verificarNotificaciones();
+    } else {
+      toast("❌ Error: " + dataCom.error);
+    }
+  } catch(err) {
+    console.error("Error saving contribution:", err);
+    toast("❌ Error de conexión");
+  }
+}
+
+async function descartarNotificacion(entrevistaId) {
+  const activeUser = sessionStorage.getItem('campanario_user');
+  if (!activeUser) return;
+  
+  try {
+    const res = await fetch('/api/usuarios/notificaciones/leer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entrevistaId, username: activeUser })
+    });
+    const data = await res.json();
+    
+    if (data.success) {
+      toast("✅ Invitación descartada");
+      abrirModalNotificaciones();
+      verificarNotificaciones();
+    } else {
+      toast("❌ Error: " + data.error);
+    }
+  } catch(err) {
+    console.error("Error discarding notification:", err);
+    toast("❌ Error de conexión");
   }
 }
 

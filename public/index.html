@@ -98,6 +98,20 @@
     <p>Bienvenido al Sistema Integral del Liceo LTP Campanario. Seleccione un módulo de gestión o utilice el buscador global para consultar estudiantes, personal, o registrar entrevistas.</p>
   </div>
   
+  <!-- Banner de Notificaciones Pendientes -->
+  <div class="card" id="notif-banner" style="display: none; border-left: 4px solid var(--primary, #4f46e5); background: rgba(99, 102, 241, 0.05); margin-bottom: 24px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 24px;">🔔</span>
+        <div>
+          <strong style="color: var(--primary, #4f46e5); font-size: 15px;">Invitaciones Pendientes</strong>
+          <div id="notif-banner-text" style="font-size: 13px; color: var(--text-secondary, #334155); margin-top: 2px;">Tienes invitaciones pendientes para aportar en entrevistas.</div>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="abrirModalNotificaciones()">Ver Invitaciones</button>
+    </div>
+  </div>
+  
   <div class="area-grid">
     <div class="area-card rrhh" onclick="goTo('rrhh')">
       <div class="area-icon">👥</div>
@@ -592,6 +606,42 @@
       <button class="btn btn-success" onclick="previsualizar()">👁 Previsualizar reporte</button>
       <button class="btn btn-secondary" onclick="abrirMultivistaModal()" style="display:flex; align-items:center; gap:6px;">📺 Compartir Pantalla (QR)</button>
       <button class="btn btn-secondary" onclick="limpiarForm()">✖ Cancelar / Limpiar</button>
+    </div>
+  </div>
+
+  <!-- Sección: Gestión de Participantes (solo edición) -->
+  <div class="card" id="e-participantes-card" style="display: none; border-left: 4px solid var(--primary, #4f46e5); margin-top: 16px;">
+    <div class="card-title" style="margin-bottom:16px; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px">
+      👥 Participantes Invitados (Aportes externos)
+    </div>
+    <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
+      Puedes invitar a otros docentes o miembros del equipo para que aporten comentarios a esta entrevista. Recibirán una notificación al iniciar sesión.
+    </p>
+    <div style="display: flex; gap: 12px; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap;">
+      <div class="form-group" style="flex: 1; min-width: 250px; margin: 0;">
+        <label style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Buscar y Seleccionar Usuario</label>
+        <select id="e-invite-select" style="width: 100%; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 14px; margin-top: 6px;">
+          <!-- Se cargará dinámicamente -->
+        </select>
+      </div>
+      <button type="button" class="btn btn-primary" onclick="invitarParticipante()" style="padding: 10px 24px;">➕ Invitar</button>
+    </div>
+    
+    <div class="tbl-wrap">
+      <table id="tbl-e-participantes">
+        <thead>
+          <tr>
+            <th>Nombre / Participante</th>
+            <th>Estamento / Perfil</th>
+            <th>Estado</th>
+            <th>Comentario / Aporte</th>
+            <th style="text-align: right;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Se cargará dinámicamente -->
+        </tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -1092,6 +1142,22 @@
     <div style="display: flex; gap: 8px; justify-content: flex-end;">
       <button type="button" class="btn btn-secondary" onclick="cerrarModalConfidencial()">Cancelar</button>
       <button type="button" class="btn btn-primary" onclick="confirmarClaveConfidencial()">Acceder</button>
+    </div>
+  </div>
+</div>
+
+<!-- PARTICIPANTS NOTIFICATIONS MODAL -->
+<div class="modal-bg" id="modal-notificaciones">
+  <div class="modal" style="max-width: 600px; padding: 24px;">
+    <div class="modal-header">
+      <div class="modal-title">🔔 Invitaciones a Participar</div>
+      <button class="modal-close" onclick="cerrarModalNotificaciones()">✖</button>
+    </div>
+    <p style="color: var(--text-muted, #64748b); font-size: 14px; margin-bottom: 20px;">
+      Has sido invitado a realizar aportes o comentarios en las siguientes entrevistas:
+    </p>
+    <div id="notif-list-container" style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px;">
+      <!-- Se cargará dinámicamente -->
     </div>
   </div>
 </div>
