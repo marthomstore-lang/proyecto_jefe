@@ -2669,6 +2669,29 @@ function generarHtmlReporte(e, tieneAcceso, participantes = []) {
         `;
       })()}
       
+      ${(() => {
+        const currentUser = sessionStorage.getItem('campanario_user');
+        const myPendingInvitation = (participantes || []).find(p => p.username === currentUser && p.estado === 'PENDIENTE');
+        if (!myPendingInvitation) return '';
+        return `
+          <div class="card no-print" style="margin-top: 20px; border: 2px solid var(--primary, #4f46e5); border-radius: var(--radius-sm, 8px); background: rgba(99, 102, 241, 0.02); padding: 16px; box-shadow: none; display: flex; flex-direction: column; gap: 10px;">
+            <h4 style="font-size: 13px; font-weight: 700; color: var(--primary, #4f46e5); margin: 0; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+              📝 Tu Aporte / Comentario Pendiente
+            </h4>
+            <p style="font-size: 12.5px; color: var(--text-secondary); margin: 0;">
+              Has sido invitado/a a participar de esta entrevista. Deja tus acuerdos, compromisos o comentarios para que se unan a la ficha oficial:
+            </p>
+            <div class="form-group" style="margin: 4px 0 0 0;">
+              <textarea id="reporte-comentario-input" placeholder="Escribe tu comentario o compromiso aquí..." style="width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; height: 80px; resize: vertical; font-family: inherit;"></textarea>
+            </div>
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+              <button class="btn btn-sm btn-secondary" style="padding: 6px 12px; font-size:12px;" onclick="descartarNotificacion('${esc(e.id)}').then(() => { cargarReporteDesdeHash('${esc(e.id)}'); })">Descartar</button>
+              <button class="btn btn-sm btn-primary" style="padding: 6px 16px; font-size:12px;" onclick="guardarAporteDesdeReporte('${esc(e.id)}')">💾 Guardar Aporte</button>
+            </div>
+          </div>
+        `;
+      })()}
+      
       <div class="firma-row">
         <div>
           <br><br>
@@ -3086,24 +3109,20 @@ async function abrirModalNotificaciones() {
     }
     
     container.innerHTML = list.map(item => `
-      <div class="card" style="border: 1px solid var(--border, #e2e8f0); padding: 16px; margin: 0; box-shadow: none; display: flex; flex-direction: column; gap: 8px;">
+      <div class="card nav-notif-item" style="border: 1px solid var(--border, #e2e8f0); padding: 16px; margin: 0; box-shadow: none; display: flex; flex-direction: column; gap: 8px; cursor: pointer; transition: all 0.2s;" onclick="irAEntrevistaNotif('${esc(item.entrevista_id)}')">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 4px;">
           <div>
             <strong style="font-size: 14px; color: var(--text-primary);">${esc(item.estudiante_nombre)}</strong>
-            <div style="font-size: 11px; color: var(--text-muted);">Por: ${esc(item.entrevistador)} el ${esc(item.fecha)}</div>
+            <div style="font-size: 11px; color: var(--text-muted);">Invitación de: ${esc(item.entrevistador)} el ${esc(item.fecha)}</div>
           </div>
           <span class="badge badge-amarillo" style="font-size: 11px; background: rgba(245, 158, 11, 0.1); color: #f59e0b; padding: 2px 8px; border-radius: 999px;">Pendiente</span>
         </div>
         <p style="font-size: 13px; margin: 0; color: var(--text-secondary); line-height: 1.4;">
           <strong style="font-size:11px; text-transform:uppercase; color:var(--text-muted)">Objetivo:</strong> ${esc(item.objetivo)}
         </p>
-        <div class="form-group" style="margin: 6px 0 0 0;">
-          <label style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Escribe tu aporte o comentario</label>
-          <textarea id="notif-comentario-${item.entrevista_id}" placeholder="Escribe aquí las observaciones, acuerdos o aportes..." style="width: 100%; box-sizing: border-box; margin-top: 6px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; height: 60px; resize: vertical;"></textarea>
-        </div>
         <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px;">
-          <button class="btn btn-sm btn-secondary" style="padding: 6px 12px; font-size:12px;" onclick="descartarNotificacion('${esc(item.entrevista_id)}')">Descartar</button>
-          <button class="btn btn-sm btn-primary" style="padding: 6px 16px; font-size:12px;" onclick="guardarAporteNotificacion('${esc(item.entrevista_id)}')">💾 Enviar Aporte</button>
+          <button class="btn btn-sm btn-secondary" style="padding: 6px 12px; font-size:12px;" onclick="event.stopPropagation(); descartarNotificacion('${esc(item.entrevista_id)}')">Descartar</button>
+          <button class="btn btn-sm btn-primary" style="padding: 6px 16px; font-size:12px;">📄 Ir a la Entrevista</button>
         </div>
       </div>
     `).join('');
@@ -3173,6 +3192,43 @@ async function descartarNotificacion(entrevistaId) {
     }
   } catch(err) {
     console.error("Error discarding notification:", err);
+    toast("❌ Error de conexión");
+  }
+}
+
+function irAEntrevistaNotif(id) {
+  cerrarModalNotificaciones();
+  window.location.hash = 'reporte?id=' + id;
+}
+
+async function guardarAporteDesdeReporte(entrevistaId) {
+  const activeUser = sessionStorage.getItem('campanario_user');
+  const txtarea = document.getElementById('reporte-comentario-input');
+  if (!activeUser || !txtarea) return;
+  
+  const comentario = txtarea.value.trim();
+  if (!comentario) {
+    toast("⚠️ Escribe un aporte o comentario antes de enviar");
+    return;
+  }
+  
+  try {
+    const resCom = await fetch('/api/entrevistas/participantes/comentar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entrevistaId, username: activeUser, comentario })
+    });
+    const dataCom = await resCom.json();
+    
+    if (dataCom.success) {
+      toast("✅ Aporte guardado con éxito en el reporte");
+      cargarReporteDesdeHash(entrevistaId);
+      verificarNotificaciones();
+    } else {
+      toast("❌ Error: " + dataCom.error);
+    }
+  } catch(err) {
+    console.error("Error saving contribution from report:", err);
     toast("❌ Error de conexión");
   }
 }
