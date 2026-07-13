@@ -1449,7 +1449,19 @@ function previsualizar() {
     obs: document.getElementById('e-obs').value,
     adjunto: document.getElementById('e-adjunto').value.trim()
   };
-  llenarReporte(ent);
+  document.getElementById('reporte').innerHTML = generarHtmlReporte(ent, true);
+  
+  const rptTitle = document.querySelector('#pg-reporte .card-title');
+  if (rptTitle) {
+    rptTitle.textContent = '📄 Vista de Ficha Oficial de Entrevista';
+  }
+  
+  const backBtn = document.querySelector('#pg-reporte .btn-secondary');
+  if (backBtn) {
+    backBtn.textContent = '⬅ Volver a Formulario';
+    backBtn.onclick = () => goTo('nueva-entrevista');
+  }
+  
   goTo('reporte');
 }
 
@@ -1604,8 +1616,11 @@ async function filtrarHistorial() {
       // Parent Row
       html += `
         <tr class="group-header" onclick="toggleGroupRow('${uniqueId}')" style="background-color: var(--bg-hover, #f8fafc); cursor: pointer; font-weight: 600;">
-          <td style="width: 40px; text-align: center;">
-            <span class="toggle-arrow" id="arrow-${uniqueId}" style="transition: transform 0.2s; display: inline-block; transform: ${arrowTransform}; font-size: 11px; color: var(--text-muted);">▶</span>
+          <td style="width: 65px; text-align: center;" onclick="event.stopPropagation();">
+            <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <span class="toggle-arrow" id="arrow-${uniqueId}" style="transition: transform 0.2s; display: inline-block; transform: ${arrowTransform}; font-size: 11px; color: var(--text-muted); cursor: pointer;" onclick="toggleGroupRow('${uniqueId}')">▶</span>
+              <input type="checkbox" class="group-chk" data-group="${uniqueId}" onchange="seleccionarGrupo('${uniqueId}', this.checked)" style="cursor: pointer; width: 14px; height: 14px;">
+            </div>
           </td>
           <td><span class="rut">${esc(group.rut)}</span></td>
           <td><strong>${esc(group.nombre)}</strong></td>
@@ -1618,7 +1633,10 @@ async function filtrarHistorial() {
             </span>
           </td>
           <td>
-            <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); entrevistar('${esc(group.rut)}')">📋 Ficha / Entrevistar</button>
+            <div style="display: flex; gap: 6px;">
+              <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); entrevistar('${esc(group.rut)}')">📋 Ficha / Entrevistar</button>
+              <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); imprimirTodasDePersona('${esc(group.rut)}')">🖨️ Imprimir todas</button>
+            </div>
           </td>
         </tr>
       `;
@@ -1627,7 +1645,9 @@ async function filtrarHistorial() {
       group.items.forEach(e => {
         html += `
           <tr class="${uniqueId}" style="display: ${displayStyle}; background-color: #ffffff;">
-            <td style="text-align: center; color: var(--text-muted); font-size: 11px; font-weight: bold;">└</td>
+            <td style="text-align: center;" onclick="event.stopPropagation();">
+              <input type="checkbox" class="print-chk" data-id="${esc(e.id)}" onchange="actualizarBotonImprimirSeleccionadas()" style="cursor: pointer; width: 14px; height: 14px;">
+            </td>
             <td><span class="rut" style="font-size: 12px; color: var(--text-secondary);">${esc(e.id)}</span></td>
             <td style="font-size: 12px; color: var(--text-secondary);">📅 ${esc(e.fecha)}</td>
             <td style="max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(e.objetivo)}">
@@ -1647,6 +1667,7 @@ async function filtrarHistorial() {
     });
     
     tbody.innerHTML = html;
+    actualizarBotonImprimirSeleccionadas();
   } catch(e) {
     console.error("Error loading interview history:", e);
   }
@@ -1750,12 +1771,19 @@ async function verReporte(id) {
   const tieneAcceso = await verificarAccesoEntrevista(e);
   if (!tieneAcceso) return;
   
-  const eClone = { ...e };
-  const meta = parseObsMetadata(e.obs);
-  eClone.obs = meta.obs;
-  eClone.adjunto = meta.adjunto;
+  document.getElementById('reporte').innerHTML = generarHtmlReporte(e, true);
   
-  llenarReporte(eClone);
+  const rptTitle = document.querySelector('#pg-reporte .card-title');
+  if (rptTitle) {
+    rptTitle.textContent = '📄 Vista de Ficha Oficial de Entrevista';
+  }
+  
+  const backBtn = document.querySelector('#pg-reporte .btn-secondary');
+  if (backBtn) {
+    backBtn.textContent = '⬅ Volver a Historial';
+    backBtn.onclick = () => goTo('historial');
+  }
+  
   goTo('reporte');
 }
 
@@ -2440,3 +2468,233 @@ async function transmitirEstadoMultivista() {
     console.error("Error transmitting multiview:", err);
   }
 }
+
+// ── IMPRESIÓN Y REPORTES DE ENTREVISTAS ──
+function tieneAccesoSilencioso(e) {
+  const meta = parseObsMetadata(e.obs);
+  if (!meta.creador) {
+    return true;
+  }
+  const currentUser = sessionStorage.getItem('campanario_user');
+  return currentUser === meta.creador;
+}
+
+function generarHtmlReporte(e, tieneAcceso) {
+  const meta = parseObsMetadata(e.obs);
+  const id = esc(e.id || '');
+  const fecha = esc(e.fecha || '') + ' ' + esc(e.hora || '');
+  const rut = esc(e.rut || '');
+  const cargo = esc(e.cargo || '');
+  const nombre = esc(e.nombre || '');
+  const curso = esc(e.curso || '');
+  const jefe = esc(e.jefe || '');
+  const asig = esc(e.asig || '');
+  const pie = esc(e.pie || '');
+  const resp = esc(e.resp || '');
+  const estado = esc(e.estado || '');
+  const seguimiento = esc(e.seguimiento || 'No fijado');
+  
+  // Si no tiene acceso, enmascaramos los contenidos sensibles
+  const objetivo = tieneAcceso ? esc(e.objetivo || '') : `<span style="color: var(--text-secondary); font-style: italic; display: flex; align-items: center; gap: 6px;">🔒 Contenido privado y confidencial</span>`;
+  const motivo = tieneAcceso ? esc(e.motivo || '') : `<span style="color: var(--text-secondary); font-style: italic; display: flex; align-items: center; gap: 6px;">🔒 Contenido privado y confidencial</span>`;
+  const acuerdos = tieneAcceso ? esc(e.acuerdos || '') : `<span style="color: var(--text-secondary); font-style: italic; display: flex; align-items: center; gap: 6px;">🔒 Contenido privado y confidencial</span>`;
+  const obs = tieneAcceso ? esc(meta.obs || '') : `<span style="color: var(--text-secondary); font-style: italic; display: flex; align-items: center; gap: 6px;">🔒 Contenido privado y confidencial</span>`;
+  
+  let bannerPrivado = '';
+  if (!tieneAcceso) {
+    bannerPrivado = `
+      <div style="padding: 24px; text-align: center; border: 2px dashed #cbd5e1; border-radius: 8px; margin: 15px 0 25px 0; background: #f8fafc;">
+        <div style="font-size: 36px; margin-bottom: 10px;">🔒</div>
+        <h3 style="font-size: 15px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">La entrevista N° ${id} es de carácter privado</h3>
+        <p style="font-size: 12px; color: #64748b; margin: 0;">Esta entrevista es confidencial y no se muestran sus detalles en este reporte impreso.</p>
+      </div>
+    `;
+  }
+
+  const adjunto = e.adjunto || meta.adjunto;
+  let adjuntoHtml = '';
+  if (adjunto && tieneAcceso) {
+    adjuntoHtml = `
+      <div class="rpt-row full no-print" style="border-bottom: 1px solid #94a3b8;">
+        <div class="rpt-cell rpt-label">Documentación Adjunta</div>
+        <div class="rpt-cell" style="min-height:36px; display: flex; align-items: center; padding: 10px 14px;">
+          <a href="${esc(adjunto)}" target="_blank" style="color: var(--primary, #4f46e5); font-weight: 600; text-decoration: none;">🔗 Ver documento en Google Drive / Evidencia</a>
+        </div>
+      </div>
+    `;
+  }
+  
+  return `
+    <div class="report-block">
+      <div class="rpt-title">
+        <h2 style="font-size:18px; margin-bottom:6px; font-family:var(--font-title); font-weight:800">Ficha de Entrevista Institucional</h2>
+        <strong style="font-size:12px; color:var(--text-secondary)">Liceo Técnico Profesional Campanario — RBD 3941</strong>
+      </div>
+      
+      ${bannerPrivado}
+      
+      <div class="rpt-row">
+        <div class="rpt-cell rpt-label">ID Entrevista</div>
+        <div class="rpt-cell" style="font-weight:700">${id}</div>
+        <div class="rpt-cell rpt-label">Fecha / Hora</div>
+        <div class="rpt-cell">${fecha}</div>
+      </div>
+      <div class="rpt-row">
+        <div class="rpt-cell rpt-label">RUT Entrevistado</div>
+        <div class="rpt-cell" style="font-family:monospace">${rut}</div>
+        <div class="rpt-cell rpt-label">Cargo / Estamento</div>
+        <div class="rpt-cell">${cargo}</div>
+      </div>
+      <div class="rpt-row">
+        <div class="rpt-cell rpt-label">Nombre Completo</div>
+        <div class="rpt-cell">${nombre}</div>
+        <div class="rpt-cell rpt-label">Curso / Función</div>
+        <div class="rpt-cell">${curso}</div>
+      </div>
+      <div class="rpt-row">
+        <div class="rpt-cell rpt-label">Profesor Jefe</div>
+        <div class="rpt-cell">${jefe}</div>
+        <div class="rpt-cell rpt-label">Profesor Asignatura</div>
+        <div class="rpt-cell">${asig}</div>
+      </div>
+      <div class="rpt-row">
+        <div class="rpt-cell rpt-label">Profesor / Especialista PIE</div>
+        <div class="rpt-cell">${pie}</div>
+        <div class="rpt-cell rpt-label">Entrevistador Responsable</div>
+        <div class="rpt-cell">${resp}</div>
+      </div>
+      <div class="rpt-row full">
+        <div class="rpt-cell rpt-label">Objetivo de la entrevista</div>
+        <div class="rpt-cell" style="min-height:60px; line-height: 1.4">${objetivo}</div>
+      </div>
+      <div class="rpt-row full">
+        <div class="rpt-cell rpt-label">Motivo / Antecedentes</div>
+        <div class="rpt-cell" style="min-height:60px; line-height: 1.4">${motivo}</div>
+      </div>
+      <div class="rpt-row full">
+        <div class="rpt-cell rpt-label">Acuerdos y Compromisos</div>
+        <div class="rpt-cell" style="min-height:60px; line-height: 1.4">${acuerdos}</div>
+      </div>
+      <div class="rpt-row">
+        <div class="rpt-cell rpt-label">Fecha Seguimiento</div>
+        <div class="rpt-cell">${seguimiento}</div>
+        <div class="rpt-cell rpt-label">Estado Ficha</div>
+        <div class="rpt-cell">${estado}</div>
+      </div>
+      ${adjuntoHtml}
+      <div class="rpt-row full">
+        <div class="rpt-cell rpt-label last-row">Observaciones Generales</div>
+        <div class="rpt-cell last-row" style="min-height:48px; line-height: 1.4">${obs}</div>
+      </div>
+      
+      <div class="firma-row">
+        <div>
+          <br><br>
+          ________________________________________<br>
+          <span style="font-size:11px; font-weight:600">Firma Entrevistador/a Responsable</span>
+        </div>
+        <div>
+          <br><br>
+          ________________________________________<br>
+          <span style="font-size:11px; font-weight:600">Firma Entrevistado/a / Apoderado/a</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function seleccionarGrupo(groupId, checked) {
+  const checkboxes = document.querySelectorAll(`.${groupId} .print-chk`);
+  checkboxes.forEach(chk => {
+    chk.checked = checked;
+  });
+  actualizarBotonImprimirSeleccionadas();
+}
+
+function actualizarBotonImprimirSeleccionadas() {
+  const groups = {};
+  document.querySelectorAll('#tbl-hist tbody .print-chk').forEach(chk => {
+    const row = chk.closest('tr');
+    const groupClass = Array.from(row.classList).find(c => c.startsWith('group-'));
+    if (groupClass) {
+      if (!groups[groupClass]) {
+        groups[groupClass] = { total: 0, checked: 0 };
+      }
+      groups[groupClass].total++;
+      if (chk.checked) {
+        groups[groupClass].checked++;
+      }
+    }
+  });
+  
+  Object.keys(groups).forEach(groupClass => {
+    const groupChk = document.querySelector(`.group-header input[data-group="${groupClass}"]`);
+    if (groupChk) {
+      groupChk.checked = (groups[groupClass].total === groups[groupClass].checked);
+    }
+  });
+
+  const checkedChks = document.querySelectorAll('#tbl-hist tbody .print-chk:checked');
+  const count = checkedChks.length;
+  const btn = document.getElementById('btn-imprimir-sel');
+  const lbl = document.getElementById('lbl-cnt-sel');
+  
+  if (btn && lbl) {
+    lbl.textContent = count;
+    if (count > 0) {
+      btn.style.display = 'inline-flex';
+    } else {
+      btn.style.display = 'none';
+    }
+  }
+}
+
+function imprimirTodasDePersona(rut) {
+  const list = entrevistas.filter(e => e.rut.toUpperCase() === rut.toUpperCase());
+  if (list.length === 0) {
+    toast("⚠️ No hay entrevistas para este RUT");
+    return;
+  }
+  imprimirListaDeEntrevistas(list);
+}
+
+function imprimirSeleccionadas() {
+  const checkedChks = document.querySelectorAll('#tbl-hist tbody .print-chk:checked');
+  const ids = Array.from(checkedChks).map(chk => chk.getAttribute('data-id'));
+  
+  const list = entrevistas.filter(e => ids.includes(e.id));
+  if (list.length === 0) {
+    toast("⚠️ Seleccione al menos una entrevista para imprimir");
+    return;
+  }
+  imprimirListaDeEntrevistas(list);
+}
+
+function imprimirListaDeEntrevistas(list) {
+  list.sort((a, b) => b.id.localeCompare(a.id));
+  
+  let html = '';
+  list.forEach((e, idx) => {
+    const tieneAcceso = tieneAccesoSilencioso(e);
+    html += generarHtmlReporte(e, tieneAcceso);
+    if (idx < list.length - 1) {
+      html += '<div class="report-block-separator no-print" style="margin: 40px 0; border-top: 2px dashed #cbd5e1; height: 1px;"></div>';
+    }
+  });
+  
+  document.getElementById('reporte').innerHTML = html;
+  
+  const rptTitle = document.querySelector('#pg-reporte .card-title');
+  if (rptTitle) {
+    rptTitle.textContent = `📄 Impresión de Entrevistas (${list.length})`;
+  }
+  
+  const backBtn = document.querySelector('#pg-reporte .btn-secondary');
+  if (backBtn) {
+    backBtn.textContent = '⬅ Volver a Historial';
+    backBtn.onclick = () => goTo('historial');
+  }
+  
+  goTo('reporte');
+}
+
