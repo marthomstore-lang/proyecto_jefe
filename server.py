@@ -297,7 +297,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 cursor.execute("""
                     SELECT p.*, e.nombre as estudiante_nombre, e.objetivo as objetivo, e.fecha as fecha, e.resp as entrevistador
                     FROM participantes_entrevista p
-                    JOIN entrevistas e ON p.entrevista_id = e.id
+                    LEFT JOIN entrevistas e ON p.entrevista_id = e.id
                     WHERE p.username = ? AND p.visto = 0
                 """, (username,))
                 rows = cursor.fetchall()

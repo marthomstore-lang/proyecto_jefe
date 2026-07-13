@@ -3052,6 +3052,39 @@ async function abrirModalNotificaciones() {
       return;
     }
     
+    // Resolver metadatos si no vienen del servidor (ej: en modo SQLite sin sincronización)
+    for (const item of list) {
+      if (!item.estudiante_nombre) {
+        let ent = entrevistas.find(x => x.id === item.entrevista_id);
+        if (!ent) {
+          try {
+            const headers = {
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+            };
+            const res = await originalFetch(`${SUPABASE_URL}/rest/v1/entrevistas?id=eq.${encodeURIComponent(item.entrevista_id)}`, { headers });
+            const data = await res.json();
+            if (data && data.length > 0) {
+              ent = data[0];
+            }
+          } catch(err) {
+            console.error("Error resolving metadata from Supabase:", err);
+          }
+        }
+        if (ent) {
+          item.estudiante_nombre = ent.nombre;
+          item.objetivo = ent.objetivo;
+          item.fecha = ent.fecha;
+          item.entrevistador = ent.resp;
+        } else {
+          item.estudiante_nombre = "Cita " + item.entrevista_id;
+          item.objetivo = "Aporte a entrevista pendiente";
+          item.fecha = "---";
+          item.entrevistador = "Docente responsable";
+        }
+      }
+    }
+    
     container.innerHTML = list.map(item => `
       <div class="card" style="border: 1px solid var(--border, #e2e8f0); padding: 16px; margin: 0; box-shadow: none; display: flex; flex-direction: column; gap: 8px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 4px;">
