@@ -535,6 +535,14 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
             else:
                 self.send_json({"success": False, "error": "Missing sessionId"}, status=400)
             return
+        elif path == '/api/multivista/end':
+            session_id = body.get("sessionId")
+            if session_id and session_id in active_sessions:
+                del active_sessions[session_id]
+                self.send_json({"success": True})
+            else:
+                self.send_json({"success": False, "error": "Invalid or missing sessionId"}, status=400)
+            return
 
         conn = get_db_connection()
         cursor = get_db_cursor(conn)

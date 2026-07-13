@@ -598,6 +598,13 @@ function goTo(page) {
   if (pageName === 'historial') { filtrarHistorial(); }
   if (pageName === 'administracion') { renderAdmin(); }
   if (pageName === 'configuracion') { renderConfiguracion(); }
+  if (pageName === 'nueva-entrevista') {
+    const params = new URLSearchParams(queryString || '');
+    const editId = params.get('edit');
+    if (editId) {
+      cargarEntrevistaParaEditarDirecto(editId);
+    }
+  }
   
   if (pageName === 'reporte') {
     const params = new URLSearchParams(queryString || '');
@@ -1502,6 +1509,8 @@ function limpiarForm() {
   document.getElementById('e-hora').value = new Date().toTimeString().slice(0, 5);
   document.getElementById('e-seguimiento').value = '';
   
+  const prevSessionId = multiviewSessionId;
+  
   editandoEntrevistaId = null;
   const btnSave = document.querySelector('#ent-btn-row button:first-child');
   if (btnSave) btnSave.innerHTML = '💾 Guardar entrevista';
@@ -1514,6 +1523,15 @@ function limpiarForm() {
     multiviewInterval = null;
   }
   multiviewSessionId = null;
+  
+  // Limpiar el hash de edición si está presente
+  if (window.location.hash.startsWith('#nueva-entrevista?')) {
+    window.location.hash = 'nueva-entrevista';
+  }
+  
+  if (prevSessionId) {
+    terminarTransmisionMultivista(prevSessionId);
+  }
 }
 
 function parseObsMetadata(obsText) {
@@ -1793,15 +1811,30 @@ function verReporte(id) {
   window.location.hash = 'reporte?id=' + id;
 }
 
-async function cargarEntrevistaParaEditar(id) {
-  const e = entrevistas.find(x => x.id === id);
+function cargarEntrevistaParaEditar(id) {
+  window.location.hash = 'nueva-entrevista?edit=' + id;
+}
+
+async function cargarEntrevistaParaEditarDirecto(id) {
+  let e = entrevistas.find(x => x.id === id);
+  if (!e) {
+    try {
+      const res = await fetch(`/api/entrevistas`);
+      const list = await res.json();
+      e = list.find(x => x.id === id);
+    } catch(err) {
+      console.error("Error loading interview for edit:", err);
+    }
+  }
   if (!e) return;
   
   const tieneAcceso = await verificarAccesoEntrevista(e);
-  if (!tieneAcceso) return;
+  if (!tieneAcceso) {
+    goTo('historial');
+    return;
+  }
   
   editandoEntrevistaId = id;
-  goTo('nueva-entrevista');
   
   document.getElementById('e-rut').value = e.rut;
   document.getElementById('e-nombre').value = e.nombre;
@@ -1832,8 +1865,8 @@ async function cargarEntrevistaParaEditar(id) {
   const btnSave = document.querySelector('#ent-btn-row button:first-child');
   if (btnSave) btnSave.innerHTML = '💾 Actualizar entrevista';
   
-  toast(`✏️ Cargada entrevista ${id} para edición`);
   cargarHistorialCita(e.rut);
+  toast(`✏️ Cargada entrevista ${id} para edición`);
 }
 
 async function eliminarEnt(id) {
@@ -2779,6 +2812,35 @@ async function cargarMultiplesReportesDesdeHash(idsList, print) {
     setTimeout(() => {
       window.print();
     }, 300);
+  }
+}
+
+async function terminarTransmisionMultivista(sessionId) {
+  if (!sessionId) return;
+  
+  // 1. Terminar en el servidor local (Python)
+  try {
+    await originalFetch('/api/multivista/end', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId })
+    });
+  } catch(err) {
+    console.error("Error ending local multivista session:", err);
+  }
+  
+  // 2. Terminar en Supabase (si está configurado)
+  try {
+    const headers = {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+    };
+    await originalFetch(`${SUPABASE_URL}/rest/v1/entrevistas?id=eq.${encodeURIComponent(sessionId)}`, {
+      method: 'DELETE',
+      headers: { ...headers }
+    });
+  } catch(err) {
+    console.error("Error deleting Supabase multivista session:", err);
   }
 }
 
