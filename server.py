@@ -605,17 +605,27 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 self.send_json({"success": False, "error": "Missing parameters"}, status=400)
                 return
             
-            from datetime import date
-            today_str = date.today().isoformat()
-            
             conn = get_db_connection()
             cursor = get_db_cursor(conn)
             try:
-                cursor.execute("""
-                    UPDATE participantes_entrevista 
-                    SET estado = 'COMENTADO', comentario = ?, fecha_comentario = ?, visto = 1 
-                    WHERE entrevista_id = ? AND username = ?
-                """, (comentario, today_str, entrevista_id, username))
+                # 1. Obtener nombre completo y perfil del participante para firmar el aporte
+                cursor.execute("SELECT nombre, perfil FROM usuarios WHERE username = ?", (username,))
+                user_row = cursor.fetchone()
+                user_fullname = user_row[0] if (user_row and user_row[0]) else username
+                user_profile = user_row[1] if (user_row and user_row[1]) else "Docente"
+                
+                # 2. Obtener y actualizar el campo obs de la entrevista en la base de datos local
+                cursor.execute("SELECT obs FROM entrevistas WHERE id = ?", (entrevista_id,))
+                ent_row = cursor.fetchone()
+                if ent_row:
+                    current_obs = ent_row[0] if ent_row[0] else ""
+                    new_contribution = f"\n\n[Aporte de {user_fullname} ({user_profile})]: {comentario}"
+                    updated_obs = current_obs + new_contribution
+                    cursor.execute("UPDATE entrevistas SET obs = ? WHERE id = ?", (updated_obs, entrevista_id))
+                
+                # 3. Eliminar la invitación para que el participante desaparezca de la lista
+                # de "Participantes Invitados" y quede liberado para futuras invitaciones.
+                cursor.execute("DELETE FROM participantes_entrevista WHERE entrevista_id = ? AND username = ?", (entrevista_id, username))
                 conn.commit()
                 self.send_json({"success": True})
             except Exception as e:

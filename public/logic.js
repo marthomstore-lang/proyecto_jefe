@@ -3218,6 +3218,39 @@ async function guardarAporteDesdeReporte(entrevistaId) {
   }
   
   try {
+    // 1. Intentar actualizar directamente en Supabase si está disponible
+    try {
+      const headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+      };
+      const resEnt = await originalFetch(`${SUPABASE_URL}/rest/v1/entrevistas?id=eq.${encodeURIComponent(entrevistaId)}`, { headers });
+      if (resEnt.ok) {
+        const dataEnt = await resEnt.json();
+        if (dataEnt && dataEnt.length > 0) {
+          const ent = dataEnt[0];
+          const currentObs = ent.obs || '';
+          const userFullName = sessionStorage.getItem('campanario_nombre') || activeUser;
+          const userProfile = sessionStorage.getItem('campanario_perfil') || 'Docente';
+          const newContribution = `\n\n[Aporte de ${userFullName} (${userProfile})]: ${comentario}`;
+          const updatedObs = currentObs + newContribution;
+          
+          await originalFetch(`${SUPABASE_URL}/rest/v1/entrevistas?id=eq.${encodeURIComponent(entrevistaId)}`, {
+            method: 'PATCH',
+            headers: {
+              ...headers,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=representation'
+            },
+            body: JSON.stringify({ obs: updatedObs })
+          });
+        }
+      }
+    } catch(sbErr) {
+      console.warn("Could not patch Supabase directly (probably offline/local fallback):", sbErr);
+    }
+
+    // 2. Enviar al backend para que actualice la base de datos local y remueva la invitación
     const resCom = await fetch('/api/entrevistas/participantes/comentar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3227,6 +3260,13 @@ async function guardarAporteDesdeReporte(entrevistaId) {
     
     if (dataCom.success) {
       toast("✅ Aporte guardado con éxito en el reporte");
+      
+      // Detener polling de vivo si existía
+      if (window.reportLiveInterval) {
+        clearInterval(window.reportLiveInterval);
+        window.reportLiveInterval = null;
+      }
+      
       cargarReporteDesdeHash(entrevistaId);
       verificarNotificaciones();
     } else {
