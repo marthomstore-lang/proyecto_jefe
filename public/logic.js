@@ -3406,7 +3406,8 @@ function abrirCrearAnotacion() {
   const rut = document.getElementById('edit-rut').value;
   if (!rut) return;
   
-  // Ocultar selector de estudiantes en modal
+  // Ocultar selector de estudiantes y curso en modal
+  document.getElementById('anot-curso-group').style.display = 'none';
   document.getElementById('anot-estudiante-group').style.display = 'none';
   
   const today = new Date().toISOString().split('T')[0];
@@ -3575,21 +3576,30 @@ async function eliminarAnotacionGlobal(id) {
 }
 
 async function abrirCrearAnotacionGlobal() {
+  document.getElementById('anot-curso-group').style.display = 'block';
   document.getElementById('anot-estudiante-group').style.display = 'block';
   
+  const cursoSelect = document.getElementById('anot-curso-select');
   const select = document.getElementById('anot-estudiante-select');
+  
+  cursoSelect.innerHTML = '<option value="">Cargando cursos...</option>';
   select.innerHTML = '<option value="">Cargando estudiantes...</option>';
   
   try {
     const res = await fetch('/api/estudiantes');
     const students = await res.json();
+    window.allStudentsCache = students;
     
-    students.sort((a,b) => `${a.Nombres} ${a['Apellido Paterno']}`.localeCompare(`${b.Nombres} ${b['Apellido Paterno']}`));
-    
-    select.innerHTML = '<option value="">Seleccione un estudiante...</option>' + 
-      students.map(s => `<option value="${esc(s.RUT)}">${esc(s.Nombres)} ${esc(s['Apellido Paterno'])} (${esc(s.Curso)}) - ${esc(s.RUT)}</option>`).join('');
+    // Obtener cursos únicos
+    const courses = [...new Set(students.map(s => s.Curso).filter(Boolean))].sort();
+    cursoSelect.innerHTML = '<option value="">Todos los cursos</option>' + 
+      courses.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+      
+    cursoSelect.value = '';
+    cargarEstudiantesPorCursoAnotacion();
   } catch (err) {
-    console.error("Error loading students for select:", err);
+    console.error("Error loading students for global annotations:", err);
+    cursoSelect.innerHTML = '<option value="">Error al cargar cursos</option>';
     select.innerHTML = '<option value="">Error al cargar estudiantes</option>';
   }
   
@@ -3601,6 +3611,32 @@ async function abrirCrearAnotacionGlobal() {
   window.anotacionModalSource = 'global';
   
   document.getElementById('modal-anotacion').classList.add('open');
+}
+
+function cargarEstudiantesPorCursoAnotacion() {
+  const selectedCurso = document.getElementById('anot-curso-select').value;
+  const select = document.getElementById('anot-estudiante-select');
+  
+  if (!window.allStudentsCache) {
+    select.innerHTML = '<option value="">Seleccione un estudiante...</option>';
+    return;
+  }
+  
+  // Filtrar estudiantes por curso si se seleccionó uno
+  let filtered = window.allStudentsCache;
+  if (selectedCurso) {
+    filtered = window.allStudentsCache.filter(s => s.Curso === selectedCurso);
+  }
+  
+  // Ordenar alfabéticamente
+  filtered.sort((a,b) => `${a.Nombres} ${a['Apellido Paterno']}`.localeCompare(`${b.Nombres} ${b['Apellido Paterno']}`));
+  
+  if (filtered.length === 0) {
+    select.innerHTML = '<option value="">No hay estudiantes en este curso</option>';
+  } else {
+    select.innerHTML = '<option value="">Seleccione un estudiante...</option>' + 
+      filtered.map(s => `<option value="${esc(s.RUT)}">${esc(s.Nombres)} ${esc(s['Apellido Paterno'])} (${esc(s.Curso)}) - ${esc(s.RUT)}</option>`).join('');
+  }
 }
 
 
