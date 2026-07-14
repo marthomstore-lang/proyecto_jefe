@@ -304,6 +304,17 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 self.send_json([dict(row) for row in rows])
                 return
 
+            elif path == '/api/anotaciones/todas':
+                cursor.execute("""
+                    SELECT a.*, e.nombres as estudiante_nombre, e.apellido_paterno as estudiante_paterno, e.apellido_materno as estudiante_materno, e.curso as estudiante_curso
+                    FROM anotaciones_estudiante a
+                    LEFT JOIN estudiantes e ON a.rut_estudiante = e.rut
+                    ORDER BY a.fecha DESC, a.id DESC
+                """)
+                rows = cursor.fetchall()
+                self.send_json([dict(row) for row in rows])
+                return
+
             elif path == '/api/usuarios/notificaciones':
                 username = query.get('username', [''])[0].strip()
                 cursor.execute("""

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema Integral — Liceo Técnico Profesional Campanario</title>
-  <link rel="stylesheet" href="styles.css?v=2.3">
+  <link rel="stylesheet" href="styles.css?v=2.4">
 </head>
 <body class="login-active">
 
@@ -62,6 +62,7 @@
     <div class="nav-item" onclick="goTo('rrhh')"><span class="icon">👥</span> Recursos Humanos</div>
     <div class="nav-item" onclick="goTo('educacion')"><span class="icon">🎓</span> Educación</div>
     <div class="nav-item" onclick="goTo('administracion')"><span class="icon">🏫</span> Administración</div>
+    <div class="nav-item" onclick="goTo('anotaciones-global')"><span class="icon">📝</span> Anotaciones</div>
   </div>
   
   <hr class="nav-divider">
@@ -465,6 +466,47 @@
           </tr>
         </thead>
         <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════ ANOTACIONES GLOBAL ══════════════ -->
+<div class="page" id="pg-anotaciones-global">
+  <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+    <div class="card-title">📝 Registro General de Anotaciones</div>
+    <button class="btn btn-primary" onclick="abrirCrearAnotacionGlobal()">➕ Registrar Anotación</button>
+  </div>
+  <div class="card">
+    <div class="search-row">
+      <input id="anot-g-q" placeholder="Buscar por estudiante, RUT o detalle..." oninput="filtrarAnotacionesGlobal()">
+      <select id="anot-g-tipo" onchange="filtrarAnotacionesGlobal()">
+        <option value="">Todos los tipos</option>
+        <option value="Negativa">🔴 Negativa</option>
+        <option value="Positiva">🟢 Positiva</option>
+        <option value="Demérito">🟡 Demérito / Leve</option>
+        <option value="Medida Pedagógica">🔵 Medida Pedagógica</option>
+      </select>
+      <input type="date" id="anot-g-fecha" onchange="filtrarAnotacionesGlobal()" placeholder="Filtrar por fecha">
+    </div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;font-weight:500;" id="anot-g-count"></div>
+    <div class="tbl-wrap">
+      <table id="tbl-anotaciones-global">
+        <thead>
+          <tr>
+            <th>Estudiante</th>
+            <th>Curso</th>
+            <th>Fecha</th>
+            <th>Tipo</th>
+            <th>Detalle</th>
+            <th>Registrado Por</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Se cargará dinámicamente con JS -->
+        </tbody>
       </table>
     </div>
   </div>
@@ -1202,6 +1244,12 @@
     </div>
     <form id="anotacion-form" onsubmit="event.preventDefault(); guardarAnotacion();">
       <div class="form-grid" style="grid-template-columns: 1fr;">
+        <div class="form-group" id="anot-estudiante-group" style="display:none">
+          <label>Estudiante</label>
+          <select id="anot-estudiante-select" style="width:100%;">
+            <option value="">Seleccione un estudiante...</option>
+          </select>
+        </div>
         <div class="form-group">
           <label>Fecha</label>
           <input type="date" id="anot-fecha" required>
@@ -1229,6 +1277,6 @@
 </div>
 
 
-<script src="logic.js?v=2.3" defer></script>
+<script src="logic.js?v=2.4" defer></script>
 </body>
 </html>

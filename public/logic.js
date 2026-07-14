@@ -602,6 +602,7 @@ function goTo(page) {
   if (pageName === 'historial') { filtrarHistorial(); }
   if (pageName === 'administracion') { renderAdmin(); }
   if (pageName === 'configuracion') { renderConfiguracion(); }
+  if (pageName === 'anotaciones-global') { filtrarAnotacionesGlobal(); }
   if (pageName === 'nueva-entrevista') {
     const params = new URLSearchParams(queryString || '');
     const editId = params.get('edit');
@@ -3405,10 +3406,15 @@ function abrirCrearAnotacion() {
   const rut = document.getElementById('edit-rut').value;
   if (!rut) return;
   
+  // Ocultar selector de estudiantes en modal
+  document.getElementById('anot-estudiante-group').style.display = 'none';
+  
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('anot-fecha').value = today;
   document.getElementById('anot-tipo').value = 'Negativa';
   document.getElementById('anot-detalle').value = '';
+  
+  window.anotacionModalSource = 'student';
   
   document.getElementById('modal-anotacion').classList.add('open');
 }
@@ -3418,7 +3424,13 @@ function cerrarModalAnotacion() {
 }
 
 async function guardarAnotacion() {
-  const rut = document.getElementById('edit-rut').value;
+  let rut = '';
+  if (window.anotacionModalSource === 'student') {
+    rut = document.getElementById('edit-rut').value;
+  } else {
+    rut = document.getElementById('anot-estudiante-select').value;
+  }
+  
   const fecha = document.getElementById('anot-fecha').value;
   const tipo = document.getElementById('anot-tipo').value;
   const detalle = document.getElementById('anot-detalle').value.trim();
@@ -3439,7 +3451,12 @@ async function guardarAnotacion() {
     if (data.success) {
       toast('✅ Anotación registrada con éxito');
       cerrarModalAnotacion();
-      cargarAnotacionesEnModal(rut);
+      
+      if (window.anotacionModalSource === 'student') {
+        cargarAnotacionesEnModal(rut);
+      } else {
+        filtrarAnotacionesGlobal();
+      }
       loadAllData();
       if (document.getElementById('pg-estudiantes').classList.contains('active')) filtrarEst();
     } else {
@@ -3474,6 +3491,116 @@ async function eliminarAnotacion(id) {
     console.error("Error deleting annotation:", err);
     toast('❌ Error de conexión al servidor');
   }
+}
+
+// ══ ANOTACIONES GLOBAL ══
+
+async function filtrarAnotacionesGlobal() {
+  const q = txt(document.getElementById('anot-g-q').value).toLowerCase();
+  const tipo = document.getElementById('anot-g-tipo').value;
+  const fecha = document.getElementById('anot-g-fecha').value;
+  const tbody = document.querySelector('#tbl-anotaciones-global tbody');
+  if (!tbody) return;
+  
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:12px;color:var(--text-muted)">Cargando anotaciones...</td></tr>';
+  
+  try {
+    const res = await fetch('/api/anotaciones/todas');
+    const list = await res.json();
+    
+    const filtered = list.filter(a => {
+      const name_str = `${a.estudiante_nombre || ''} ${a.estudiante_paterno || ''} ${a.estudiante_materno || ''}`.toLowerCase();
+      const matchQ = !q || name_str.includes(q) || (a.rut_estudiante || '').toLowerCase().includes(q) || (a.detalle || '').toLowerCase().includes(q);
+      const matchTipo = !tipo || a.tipo === tipo;
+      const matchFecha = !fecha || a.fecha === fecha;
+      return matchQ && matchTipo && matchFecha;
+    });
+    
+    document.getElementById('anot-g-count').textContent = `Mostrando ${filtered.length} anotaciones`;
+    
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:12px;color:var(--text-muted)">No se encontraron anotaciones.</td></tr>';
+    } else {
+      tbody.innerHTML = filtered.map(a => `
+        <tr>
+          <td>
+            <strong>${esc(a.estudiante_nombre || '')} ${esc(a.estudiante_paterno || '')}</strong> 
+            <br><small style="color:var(--text-muted)">${esc(a.rut_estudiante)}</small>
+          </td>
+          <td>${esc(a.estudiante_curso || 'N/A')}</td>
+          <td>${esc(a.fecha)}</td>
+          <td><span class="badge ${a.tipo === 'Positiva' ? 'badge-verde' : a.tipo === 'Negativa' ? 'badge-rojo' : a.tipo === 'Demérito' ? 'badge-naranja' : 'badge-azul'}">${esc(a.tipo)}</span></td>
+          <td style="max-width:320px; word-break:break-word;" title="${esc(a.detalle)}">${esc(a.detalle)}</td>
+          <td>${esc(a.autor || 'N/A')}</td>
+          <td>
+            <div style="display:flex;gap:4px">
+              <button type="button" class="btn btn-sm btn-primary" onclick="irAFichaDesdeAnotacion('${esc(a.rut_estudiante)}')">📋 Ficha</button>
+              <button type="button" class="btn btn-sm btn-danger" onclick="eliminarAnotacionGlobal('${esc(a.id)}')">✖</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+  } catch (err) {
+    console.error("Error loading global annotations:", err);
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:12px;color:var(--danger)">Error al cargar anotaciones.</td></tr>';
+  }
+}
+
+function irAFichaDesdeAnotacion(rut) {
+  abrirEditar(rut);
+}
+
+async function eliminarAnotacionGlobal(id) {
+  if (!confirm('¿Está seguro de que desea eliminar esta anotación?')) return;
+  
+  try {
+    const res = await fetch('/api/anotaciones/eliminar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast('✅ Anotación eliminada');
+      filtrarAnotacionesGlobal();
+      loadAllData();
+    } else {
+      toast('❌ Error: ' + data.error);
+    }
+  } catch (err) {
+    console.error("Error deleting annotation:", err);
+    toast('❌ Error de conexión al servidor');
+  }
+}
+
+async function abrirCrearAnotacionGlobal() {
+  document.getElementById('anot-estudiante-group').style.display = 'block';
+  
+  const select = document.getElementById('anot-estudiante-select');
+  select.innerHTML = '<option value="">Cargando estudiantes...</option>';
+  
+  try {
+    const res = await fetch('/api/estudiantes');
+    const students = await res.json();
+    
+    students.sort((a,b) => `${a.Nombres} ${a['Apellido Paterno']}`.localeCompare(`${b.Nombres} ${b['Apellido Paterno']}`));
+    
+    select.innerHTML = '<option value="">Seleccione un estudiante...</option>' + 
+      students.map(s => `<option value="${esc(s.RUT)}">${esc(s.Nombres)} ${esc(s['Apellido Paterno'])} (${esc(s.Curso)}) - ${esc(s.RUT)}</option>`).join('');
+  } catch (err) {
+    console.error("Error loading students for select:", err);
+    select.innerHTML = '<option value="">Error al cargar estudiantes</option>';
+  }
+  
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('anot-fecha').value = today;
+  document.getElementById('anot-tipo').value = 'Negativa';
+  document.getElementById('anot-detalle').value = '';
+  
+  window.anotacionModalSource = 'global';
+  
+  document.getElementById('modal-anotacion').classList.add('open');
 }
 
 
