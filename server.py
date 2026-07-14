@@ -662,6 +662,25 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 release_db_connection(conn)
             return
 
+        elif path == '/api/entrevistas/participantes/eliminar':
+            entrevista_id = body.get("entrevistaId")
+            username = body.get("username")
+            if not entrevista_id or not username:
+                self.send_json({"success": False, "error": "Missing parameters"}, status=400)
+                return
+            
+            conn = get_db_connection()
+            cursor = get_db_cursor(conn)
+            try:
+                cursor.execute("DELETE FROM participantes_entrevista WHERE entrevista_id = ? AND username = ?", (entrevista_id, username))
+                conn.commit()
+                self.send_json({"success": True})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)}, status=500)
+            finally:
+                release_db_connection(conn)
+            return
+
         conn = get_db_connection()
         cursor = get_db_cursor(conn)
         

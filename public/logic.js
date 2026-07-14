@@ -564,6 +564,10 @@ function goTo(page) {
   // Guardar la página previa en sessionStorage (si no es reporte)
   if (pageName !== 'reporte') {
     sessionStorage.setItem('campanario_prev_page', pageName);
+    if (window.reportLiveInterval) {
+      clearInterval(window.reportLiveInterval);
+      window.reportLiveInterval = null;
+    }
   }
   
   // Sincronizar hash en la barra de direcciones
@@ -2624,15 +2628,15 @@ function generarHtmlReporte(e, tieneAcceso, participantes = []) {
       </div>
       <div class="rpt-row full">
         <div class="rpt-cell rpt-label">Objetivo de la entrevista</div>
-        <div class="rpt-cell" style="min-height:60px; line-height: 1.4">${objetivo}</div>
+        <div class="rpt-cell" id="rpt-val-objetivo" style="min-height:60px; line-height: 1.4">${objetivo}</div>
       </div>
       <div class="rpt-row full">
         <div class="rpt-cell rpt-label">Motivo / Antecedentes</div>
-        <div class="rpt-cell" style="min-height:60px; line-height: 1.4">${motivo}</div>
+        <div class="rpt-cell" id="rpt-val-motivo" style="min-height:60px; line-height: 1.4">${motivo}</div>
       </div>
       <div class="rpt-row full">
         <div class="rpt-cell rpt-label">Acuerdos y Compromisos</div>
-        <div class="rpt-cell" style="min-height:60px; line-height: 1.4">${acuerdos}</div>
+        <div class="rpt-cell" id="rpt-val-acuerdos" style="min-height:60px; line-height: 1.4">${acuerdos}</div>
       </div>
       <div class="rpt-row">
         <div class="rpt-cell rpt-label">Fecha Seguimiento</div>
@@ -2643,7 +2647,7 @@ function generarHtmlReporte(e, tieneAcceso, participantes = []) {
       ${adjuntoHtml}
       <div class="rpt-row full">
         <div class="rpt-cell rpt-label last-row">Observaciones Generales</div>
-        <div class="rpt-cell last-row" style="min-height:48px; line-height: 1.4">${obs}</div>
+        <div class="rpt-cell last-row" id="rpt-val-obs" style="min-height:48px; line-height: 1.4">${obs}</div>
       </div>
       
       ${(() => {
@@ -2813,6 +2817,8 @@ async function cargarReporteDesdeHash(id, print) {
   
   document.getElementById('reporte').innerHTML = generarHtmlReporte(e, true, participantes);
   
+  iniciarLiveReportPolling(id);
+  
   const rptTitle = document.querySelector('#pg-reporte .card-title');
   if (rptTitle) {
     rptTitle.textContent = '📄 Vista de Ficha Oficial de Entrevista';
@@ -2957,10 +2963,9 @@ async function cargarParticipantesEdit(entrevistaId) {
       
       let actionBtn = '';
       if (p.estado === 'PENDIENTE') {
-        actionBtn = `<button type="button" class="btn btn-sm btn-secondary" onclick="recordarParticipante('${esc(p.username)}')">🔔 Recordar</button>`;
-      } else {
-        actionBtn = `<span style="font-size:12px; color:var(--text-muted); font-style:italic;">Completado</span>`;
+        actionBtn = `<button type="button" class="btn btn-sm btn-secondary" style="margin-right: 4px;" onclick="recordarParticipante('${esc(p.username)}')">🔔 Recordar</button>`;
       }
+      actionBtn += `<button type="button" class="btn btn-sm btn-danger" onclick="eliminarParticipanteInvitacion('${esc(p.username)}')">✖ Eliminar</button>`;
       
       return `
         <tr>
@@ -3231,5 +3236,95 @@ async function guardarAporteDesdeReporte(entrevistaId) {
     console.error("Error saving contribution from report:", err);
     toast("❌ Error de conexión");
   }
+}
+
+async function eliminarParticipanteInvitacion(username) {
+  if (!editandoEntrevistaId) return;
+  
+  if (!confirm(`¿Está seguro de que desea eliminar a @${username} de esta entrevista?`)) {
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/entrevistas/participantes/eliminar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entrevistaId: editandoEntrevistaId, username })
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast("✅ Participante eliminado con éxito");
+      cargarParticipantesEdit(editandoEntrevistaId);
+    } else {
+      toast("❌ Error: " + data.error);
+    }
+  } catch(err) {
+    console.error("Error deleting participant invitation:", err);
+    toast("❌ Error de conexión");
+  }
+}
+
+function iniciarLiveReportPolling(id) {
+  if (window.reportLiveInterval) clearInterval(window.reportLiveInterval);
+  
+  async function fetchReportLive() {
+    try {
+      let res = await fetch(`/api/multivista/live?session=${encodeURIComponent(id)}`);
+      let data = {};
+      if (res.ok && (res.headers.get('Content-Type') || '').includes('application/json')) {
+        data = await res.json();
+      }
+      
+      const liveIndicator = document.getElementById('reporte-live-indicator');
+      if (data && data.sessionId) {
+        if (!liveIndicator) {
+          const titleDiv = document.querySelector('.rpt-title');
+          if (titleDiv) {
+            const ind = document.createElement('div');
+            ind.id = 'reporte-live-indicator';
+            ind.className = 'no-print';
+            ind.style = 'display: inline-flex; align-items: center; gap: 6px; background-color: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: 600; text-transform: uppercase; margin-top: 6px; border: 1px solid rgba(239, 68, 68, 0.2);';
+            ind.innerHTML = '<span style="width: 6px; height: 6px; background-color: #ef4444; border-radius: 50%; display: inline-block; box-shadow: 0 0 6px #ef4444; animation: pulse 1.5s infinite;"></span> EN VIVO';
+            titleDiv.appendChild(ind);
+          }
+        }
+        
+        const elObj = document.getElementById('rpt-val-objetivo');
+        const elMot = document.getElementById('rpt-val-motivo');
+        const elAcu = document.getElementById('rpt-val-acuerdos');
+        const elObs = document.getElementById('rpt-val-obs');
+        
+        if (elObj && elObj.textContent !== (data.objetivo || '')) {
+          elObj.textContent = data.objetivo || '';
+          elObj.classList.add('updated');
+          setTimeout(() => elObj.classList.remove('updated'), 600);
+        }
+        if (elMot && elMot.textContent !== (data.motivo || '')) {
+          elMot.textContent = data.motivo || '';
+          elMot.classList.add('updated');
+          setTimeout(() => elMot.classList.remove('updated'), 600);
+        }
+        if (elAcu && elAcu.textContent !== (data.acuerdos || '')) {
+          elAcu.textContent = data.acuerdos || '';
+          elAcu.classList.add('updated');
+          setTimeout(() => elAcu.classList.remove('updated'), 600);
+        }
+        if (elObs) {
+          const meta = parseObsMetadata(data.obs);
+          if (elObs.textContent !== (meta.obs || '')) {
+            elObs.textContent = meta.obs || '';
+            elObs.classList.add('updated');
+            setTimeout(() => elObs.classList.remove('updated'), 600);
+          }
+        }
+      } else {
+        if (liveIndicator) liveIndicator.remove();
+      }
+    } catch(err) {
+      console.error("Error polling report live:", err);
+    }
+  }
+  
+  window.reportLiveInterval = setInterval(fetchReportLive, 1500);
 }
 
