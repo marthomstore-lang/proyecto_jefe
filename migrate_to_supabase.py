@@ -31,7 +31,8 @@ SCHEMAS = {
             profesor_pie TEXT,
             fecha_nacimiento TEXT,
             estado TEXT,
-            edad INTEGER
+            edad INTEGER,
+            anotaciones TEXT DEFAULT ''
         );
     """,
     "docentes": """

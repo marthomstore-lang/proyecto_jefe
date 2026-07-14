@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema Integral — Liceo Técnico Profesional Campanario</title>
-  <link rel="stylesheet" href="styles.css?v=2.0">
+  <link rel="stylesheet" href="styles.css?v=2.2">
 </head>
 <body class="login-active">
 
@@ -397,6 +397,7 @@
             <th id="th-est-cur" style="cursor:pointer; user-select:none;" onclick="sortEstTable('Curso')">Curso</th>
             <th id="th-est-edad" style="cursor:pointer; user-select:none;" onclick="sortEstTable('Edad')">Edad</th>
             <th id="th-est-est" style="cursor:pointer; user-select:none;" onclick="sortEstTable('Estado Matrícula')">Estado</th>
+            <th id="th-est-anot">Anotaciones</th>
             <th>Acciones</th>
           </tr>
         </thead>
@@ -836,6 +837,10 @@
             <option value="Retirado">Retirado</option>
           </select>
         </div>
+        <div class="form-group">
+          <label>Anotaciones (Cantidad o Detalle)</label>
+          <input id="n-anotaciones" placeholder="Ej: 3, o '2 negativas, 1 positiva'...">
+        </div>
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" onclick="agregarEstudiante()">💾 Guardar estudiante</button>
@@ -1044,6 +1049,10 @@
             <option value="Retirado">Retirado</option>
           </select>
         </div>
+        <div class="form-group div-edit-est">
+          <label>Anotaciones (Cantidad o Detalle)</label>
+          <input id="edit-anotaciones" placeholder="Ej: 3, o '2 negativas y 1 positiva'...">
+        </div>
         
         <div class="form-group div-edit-per">
           <label>Función / Asignatura</label>
@@ -1169,6 +1178,6 @@
 </div>
 
 
-<script src="logic.js?v=2.0" defer></script>
+<script src="logic.js?v=2.2" defer></script>
 </body>
 </html>

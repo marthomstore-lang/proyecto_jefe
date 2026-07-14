@@ -77,8 +77,8 @@ class QueryAdapterCursor:
                 query = """
                     INSERT INTO estudiantes (
                         rut, nombres, apellido_paterno, apellido_materno, curso, 
-                        profesor_jefe, profesor_asignatura, profesor_pie, fecha_nacimiento, estado, edad
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        profesor_jefe, profesor_asignatura, profesor_pie, fecha_nacimiento, estado, edad, anotaciones
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (rut) 
                     DO UPDATE SET nombres = EXCLUDED.nombres, 
                                   apellido_paterno = EXCLUDED.apellido_paterno, 
@@ -89,7 +89,8 @@ class QueryAdapterCursor:
                                   profesor_pie = EXCLUDED.profesor_pie, 
                                   fecha_nacimiento = EXCLUDED.fecha_nacimiento, 
                                   estado = EXCLUDED.estado, 
-                                  edad = EXCLUDED.edad
+                                  edad = EXCLUDED.edad,
+                                  anotaciones = EXCLUDED.anotaciones
                 """
             elif "INSERT OR REPLACE INTO DOCENTES" in query_upper:
                 query = """
@@ -361,7 +362,8 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                                 "Profesor de Asignatura": r['profesor_asignatura'],
                                 "Profesor PIE": r['profesor_pie'],
                                 "Fecha de Nacimiento": r['fecha_nacimiento'],
-                                "Estado Matrícula": r['estado']
+                                "Estado Matrícula": r['estado'],
+                                "Anotaciones": r.get('anotaciones', '')
                             })
                             
                 # Docentes
@@ -437,7 +439,8 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                             "Profesor PIE": r['profesor_pie'],
                             "Fecha de Nacimiento": r['fecha_nacimiento'],
                             "Estado Matrícula": r['estado'],
-                            "Edad": r['edad']
+                            "Edad": r['edad'],
+                            "Anotaciones": r.get('anotaciones', '')
                         })
                 self.send_json(results)
 
@@ -774,8 +777,8 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 cursor.execute("""
                 INSERT OR REPLACE INTO estudiantes (
                     rut, nombres, apellido_paterno, apellido_materno, curso, 
-                    profesor_jefe, profesor_asignatura, profesor_pie, fecha_nacimiento, estado, edad
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    profesor_jefe, profesor_asignatura, profesor_pie, fecha_nacimiento, estado, edad, anotaciones
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     rut,
                     nombres,
@@ -787,7 +790,8 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                     pie,
                     fnac,
                     estado,
-                    edad
+                    edad,
+                    body.get("Anotaciones", "")
                 ))
                 conn.commit()
                 self.send_json({"success": True})
@@ -1031,6 +1035,13 @@ def run_server():
         """)
         conn.commit()
         
+        # Asegurar columna anotaciones en estudiantes
+        try:
+            cursor.execute("ALTER TABLE estudiantes ADD COLUMN anotaciones TEXT DEFAULT ''")
+            conn.commit()
+        except Exception:
+            pass
+            
         cursor.execute("SELECT COUNT(*) FROM usuarios")
         row = cursor.fetchone()
         count = 0

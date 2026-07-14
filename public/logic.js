@@ -899,7 +899,7 @@ async function filtrarEst() {
     
     document.getElementById('est-count').textContent = `Mostrando ${rows.length} registros`;
     const tbody = document.querySelector('#tbl-est tbody');
-    tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">No hay registros.</td></tr>' :
+    tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="8" style="text-align:center;color:var(--text-muted)">No hay registros.</td></tr>' :
     rows.map(e => `<tr>
       <td><span class="rut">${esc(e.RUT)}</span></td>
       <td><strong>${esc(e.Nombres)}</strong></td>
@@ -907,6 +907,7 @@ async function filtrarEst() {
       <td>${esc(e.Curso)}</td>
       <td>${esc(formatEdadExacta(e['Fecha de Nacimiento'], e.Edad))}</td>
       <td><span class="badge ${e['Estado Matrícula'] === 'Vigente' ? 'badge-verde' : 'badge-rojo'}">${esc(e['Estado Matrícula'])}</span></td>
+      <td><span style="font-size:12.5px; font-weight:600; color:var(--text-primary);">${esc(e.Anotaciones || '0')}</span></td>
       <td>
         <div style="display:flex;gap:6px">
           <button class="btn btn-sm btn-primary" onclick="entrevistar('${esc(e.RUT)}')">📋 Ficha / Entrevistar</button>
@@ -1098,6 +1099,7 @@ async function abrirEditar(rut) {
       document.getElementById('edit-curso').value = p.Curso || '';
       document.getElementById('edit-jefe').value = p['Profesor Jefe'] || '';
       document.getElementById('edit-estado-mat').value = p['Estado Matrícula'] || 'Vigente';
+      document.getElementById('edit-anotaciones').value = p.Anotaciones || '';
     } else {
       estDivs.forEach(d => d.style.display = 'none');
       perDivs.forEach(d => d.style.display = 'flex');
@@ -1197,7 +1199,8 @@ async function guardarCambiosPersona() {
       "Profesor Jefe": document.getElementById('edit-jefe').value,
       "Fecha de Nacimiento": fnac,
       "Estado Matrícula": document.getElementById('edit-estado-mat').value,
-      Edad: calculatedEdad
+      Edad: calculatedEdad,
+      Anotaciones: document.getElementById('edit-anotaciones').value.trim()
     };
   } else if (cargo === 'Docente') {
     url = '/api/docentes';
@@ -1941,7 +1944,8 @@ async function agregarEstudiante() {
     RUT: rut, Nombres: nom, 'Apellido Paterno': pat, 'Apellido Materno': mat,
     Cargo: 'Estudiante', Curso: curso, 'Profesor Jefe': document.getElementById('n-jefe').value.trim(),
     'Fecha de Nacimiento': fnacVal,
-    'Estado Matrícula': document.getElementById('n-estado').value, Edad: calculatedEdad
+    'Estado Matrícula': document.getElementById('n-estado').value, Edad: calculatedEdad,
+    Anotaciones: document.getElementById('n-anotaciones').value.trim()
   };
   
   try {
@@ -1953,7 +1957,7 @@ async function agregarEstudiante() {
     const result = await res.json();
     if (result.success) {
       toast('✅ Estudiante agregado');
-      ['n-rut', 'n-nombres', 'n-pat', 'n-mat', 'n-curso', 'n-jefe', 'n-fnac'].forEach(id => {
+      ['n-rut', 'n-nombres', 'n-pat', 'n-mat', 'n-curso', 'n-jefe', 'n-fnac', 'n-anotaciones'].forEach(id => {
         document.getElementById(id).value = '';
       });
       loadAllData();
