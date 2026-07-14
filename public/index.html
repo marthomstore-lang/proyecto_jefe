@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema Integral — Liceo Técnico Profesional Campanario</title>
-  <link rel="stylesheet" href="styles.css?v=2.2">
+  <link rel="stylesheet" href="styles.css?v=2.3">
 </head>
 <body class="login-active">
 
@@ -837,10 +837,6 @@
             <option value="Retirado">Retirado</option>
           </select>
         </div>
-        <div class="form-group">
-          <label>Anotaciones (Cantidad o Detalle)</label>
-          <input id="n-anotaciones" placeholder="Ej: 3, o '2 negativas, 1 positiva'...">
-        </div>
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" onclick="agregarEstudiante()">💾 Guardar estudiante</button>
@@ -1049,10 +1045,6 @@
             <option value="Retirado">Retirado</option>
           </select>
         </div>
-        <div class="form-group div-edit-est">
-          <label>Anotaciones (Cantidad o Detalle)</label>
-          <input id="edit-anotaciones" placeholder="Ej: 3, o '2 negativas y 1 positiva'...">
-        </div>
         
         <div class="form-group div-edit-per">
           <label>Función / Asignatura</label>
@@ -1098,6 +1090,30 @@
           </thead>
           <tbody>
             <!-- Se poblará dinámicamente con JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Sección: Historial de Anotaciones / Observaciones de Comportamiento -->
+    <div id="edit-anotaciones-section" class="div-edit-est" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border);">
+      <div style="font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+        <span style="display:flex; align-items:center; gap:6px">📝 Historial de Anotaciones</span>
+        <button type="button" class="btn btn-primary btn-sm" onclick="abrirCrearAnotacion()">➕ Agregar Anotación</button>
+      </div>
+      <div class="tbl-wrap" style="max-height: 200px; overflow-y: auto;">
+        <table id="tbl-edit-anotaciones">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Tipo</th>
+              <th>Detalle</th>
+              <th>Registrado Por</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Se cargará dinámicamente -->
           </tbody>
         </table>
       </div>
@@ -1177,7 +1193,42 @@
 
 </div>
 
+<!-- MODAL AGREGAR ANOTACIÓN -->
+<div class="modal-bg" id="modal-anotacion" style="z-index: 1100;">
+  <div class="modal" style="max-width: 500px;">
+    <div class="modal-header">
+      <div class="modal-title">📝 Registrar Nueva Anotación</div>
+      <button class="modal-close" onclick="cerrarModalAnotacion()">✖</button>
+    </div>
+    <form id="anotacion-form" onsubmit="event.preventDefault(); guardarAnotacion();">
+      <div class="form-grid" style="grid-template-columns: 1fr;">
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="anot-fecha" required>
+        </div>
+        <div class="form-group">
+          <label>Tipo de Anotación</label>
+          <select id="anot-tipo" required>
+            <option value="Negativa">🔴 Negativa</option>
+            <option value="Positiva">🟢 Positiva</option>
+            <option value="Demérito">🟡 Demérito / Leve</option>
+            <option value="Medida Pedagógica">🔵 Medida Pedagógica</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Detalle / Descripción</label>
+          <textarea id="anot-detalle" rows="4" placeholder="Escribe el detalle de la anotación..." required style="width:100%; border:1px solid var(--border); border-radius:6px; padding:8px; font-family:inherit; font-size:14px; background:var(--bg-card); color:var(--text-primary); outline:none; resize:vertical;"></textarea>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top: 20px;">
+        <button type="submit" class="btn btn-primary">💾 Guardar Anotación</button>
+        <button type="button" class="btn btn-secondary" onclick="cerrarModalAnotacion()">✖ Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
 
-<script src="logic.js?v=2.2" defer></script>
+
+<script src="logic.js?v=2.3" defer></script>
 </body>
 </html>

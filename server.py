@@ -293,6 +293,17 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 self.send_json([dict(row) for row in rows])
                 return
 
+            elif path == '/api/anotaciones':
+                rut = query.get('rut', [''])[0].strip()
+                cursor.execute("""
+                    SELECT * FROM anotaciones_estudiante 
+                    WHERE rut_estudiante = ? 
+                    ORDER BY fecha DESC
+                """, (rut,))
+                rows = cursor.fetchall()
+                self.send_json([dict(row) for row in rows])
+                return
+
             elif path == '/api/usuarios/notificaciones':
                 username = query.get('username', [''])[0].strip()
                 cursor.execute("""
@@ -345,7 +356,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 
                 # Estudiantes
                 if not filtro or filtro == 'Estudiante':
-                    cursor.execute("SELECT * FROM estudiantes")
+                    cursor.execute("SELECT *, (SELECT COUNT(*) FROM anotaciones_estudiante WHERE rut_estudiante = estudiantes.rut) as anotaciones_count FROM estudiantes")
                     for row in cursor.fetchall():
                         r = dict(row)
                         name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''}".lower()
@@ -363,7 +374,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                                 "Profesor PIE": r['profesor_pie'],
                                 "Fecha de Nacimiento": r['fecha_nacimiento'],
                                 "Estado Matrícula": r['estado'],
-                                "Anotaciones": r.get('anotaciones', '')
+                                "Anotaciones": r.get('anotaciones_count', 0)
                             })
                             
                 # Docentes
@@ -413,7 +424,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 curso = query.get('curso', [''])[0].strip()
                 estado = query.get('estado', [''])[0].strip()
                 
-                sql = "SELECT * FROM estudiantes WHERE 1=1"
+                sql = "SELECT *, (SELECT COUNT(*) FROM anotaciones_estudiante WHERE rut_estudiante = estudiantes.rut) as anotaciones_count FROM estudiantes WHERE 1=1"
                 params = []
                 if curso:
                     sql += " AND curso = ?"
@@ -440,7 +451,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                             "Fecha de Nacimiento": r['fecha_nacimiento'],
                             "Estado Matrícula": r['estado'],
                             "Edad": r['edad'],
-                            "Anotaciones": r.get('anotaciones', '')
+                            "Anotaciones": r.get('anotaciones_count', 0)
                         })
                 self.send_json(results)
 
@@ -686,6 +697,47 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
             cursor = get_db_cursor(conn)
             try:
                 cursor.execute("DELETE FROM participantes_entrevista WHERE entrevista_id = ? AND username = ?", (entrevista_id, username))
+                conn.commit()
+                self.send_json({"success": True})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)}, status=500)
+            finally:
+                release_db_connection(conn)
+        elif path == '/api/anotaciones':
+            import uuid
+            rut = body.get("rut")
+            fecha = body.get("fecha")
+            tipo = body.get("tipo")
+            detalle = body.get("detalle")
+            autor = body.get("autor", "admin")
+            if not rut or not fecha or not tipo or not detalle:
+                self.send_json({"success": False, "error": "Missing parameters"}, status=400)
+                return
+            conn = get_db_connection()
+            cursor = get_db_cursor(conn)
+            try:
+                uid = uuid.uuid4().hex
+                cursor.execute("""
+                    INSERT INTO anotaciones_estudiante (id, rut_estudiante, fecha, tipo, detalle, autor)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (uid, rut, fecha, tipo, detalle, autor))
+                conn.commit()
+                self.send_json({"success": True})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)}, status=500)
+            finally:
+                release_db_connection(conn)
+            return
+
+        elif path == '/api/anotaciones/eliminar':
+            uid = body.get("id")
+            if not uid:
+                self.send_json({"success": False, "error": "Missing id"}, status=400)
+                return
+            conn = get_db_connection()
+            cursor = get_db_cursor(conn)
+            try:
+                cursor.execute("DELETE FROM anotaciones_estudiante WHERE id = ?", (uid,))
                 conn.commit()
                 self.send_json({"success": True})
             except Exception as e:
@@ -1031,6 +1083,16 @@ def run_server():
             comentario TEXT DEFAULT '',
             fecha_comentario TEXT DEFAULT '',
             visto INTEGER DEFAULT 0
+        )
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS anotaciones_estudiante (
+            id TEXT PRIMARY KEY,
+            rut_estudiante TEXT,
+            fecha TEXT,
+            tipo TEXT,
+            detalle TEXT,
+            autor TEXT
         )
         """)
         conn.commit()

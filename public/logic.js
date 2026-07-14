@@ -1099,7 +1099,7 @@ async function abrirEditar(rut) {
       document.getElementById('edit-curso').value = p.Curso || '';
       document.getElementById('edit-jefe').value = p['Profesor Jefe'] || '';
       document.getElementById('edit-estado-mat').value = p['Estado Matrícula'] || 'Vigente';
-      document.getElementById('edit-anotaciones').value = p.Anotaciones || '';
+      await cargarAnotacionesEnModal(rut);
     } else {
       estDivs.forEach(d => d.style.display = 'none');
       perDivs.forEach(d => d.style.display = 'flex');
@@ -1199,8 +1199,7 @@ async function guardarCambiosPersona() {
       "Profesor Jefe": document.getElementById('edit-jefe').value,
       "Fecha de Nacimiento": fnac,
       "Estado Matrícula": document.getElementById('edit-estado-mat').value,
-      Edad: calculatedEdad,
-      Anotaciones: document.getElementById('edit-anotaciones').value.trim()
+      Edad: calculatedEdad
     };
   } else if (cargo === 'Docente') {
     url = '/api/docentes';
@@ -3371,4 +3370,110 @@ function iniciarLiveReportPolling(id) {
   
   window.reportLiveInterval = setInterval(fetchReportLive, 1500);
 }
+
+async function cargarAnotacionesEnModal(rut) {
+  const tbody = document.querySelector('#tbl-edit-anotaciones tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:12px;color:var(--text-muted)">Cargando anotaciones...</td></tr>';
+  
+  try {
+    const res = await fetch(`/api/anotaciones?rut=${encodeURIComponent(rut)}`);
+    const list = await res.json();
+    
+    if (list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:12px;color:var(--text-muted)">No hay anotaciones registradas para este estudiante.</td></tr>';
+    } else {
+      tbody.innerHTML = list.map(a => `
+        <tr>
+          <td>${esc(a.fecha)}</td>
+          <td><span class="badge ${a.tipo === 'Positiva' ? 'badge-verde' : a.tipo === 'Negativa' ? 'badge-rojo' : a.tipo === 'Demérito' ? 'badge-naranja' : 'badge-azul'}">${esc(a.tipo)}</span></td>
+          <td style="max-width:300px; word-break:break-word;" title="${esc(a.detalle)}">${esc(a.detalle)}</td>
+          <td>${esc(a.autor || 'N/A')}</td>
+          <td>
+            <button type="button" class="btn btn-sm btn-danger" onclick="eliminarAnotacion('${esc(a.id)}')">✖</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+  } catch (err) {
+    console.error("Error loading annotations in modal:", err);
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:12px;color:var(--danger)">Error al cargar anotaciones.</td></tr>';
+  }
+}
+
+function abrirCrearAnotacion() {
+  const rut = document.getElementById('edit-rut').value;
+  if (!rut) return;
+  
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('anot-fecha').value = today;
+  document.getElementById('anot-tipo').value = 'Negativa';
+  document.getElementById('anot-detalle').value = '';
+  
+  document.getElementById('modal-anotacion').classList.add('open');
+}
+
+function cerrarModalAnotacion() {
+  document.getElementById('modal-anotacion').classList.remove('open');
+}
+
+async function guardarAnotacion() {
+  const rut = document.getElementById('edit-rut').value;
+  const fecha = document.getElementById('anot-fecha').value;
+  const tipo = document.getElementById('anot-tipo').value;
+  const detalle = document.getElementById('anot-detalle').value.trim();
+  const activeUser = sessionStorage.getItem('campanario_user') || 'admin';
+  
+  if (!rut || !fecha || !tipo || !detalle) {
+    toast('⚠️ Rellene todos los campos requeridos');
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/anotaciones', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rut, fecha, tipo, detalle, autor: activeUser })
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast('✅ Anotación registrada con éxito');
+      cerrarModalAnotacion();
+      cargarAnotacionesEnModal(rut);
+      loadAllData();
+      if (document.getElementById('pg-estudiantes').classList.contains('active')) filtrarEst();
+    } else {
+      toast('❌ Error: ' + data.error);
+    }
+  } catch (err) {
+    console.error("Error saving annotation:", err);
+    toast('❌ Error de conexión al servidor');
+  }
+}
+
+async function eliminarAnotacion(id) {
+  if (!confirm('¿Está seguro de que desea eliminar esta anotación?')) return;
+  
+  const rut = document.getElementById('edit-rut').value;
+  try {
+    const res = await fetch('/api/anotaciones/eliminar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast('✅ Anotación eliminada');
+      cargarAnotacionesEnModal(rut);
+      loadAllData();
+      if (document.getElementById('pg-estudiantes').classList.contains('active')) filtrarEst();
+    } else {
+      toast('❌ Error: ' + data.error);
+    }
+  } catch (err) {
+    console.error("Error deleting annotation:", err);
+    toast('❌ Error de conexión al servidor');
+  }
+}
+
 

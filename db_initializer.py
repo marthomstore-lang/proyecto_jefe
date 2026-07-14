@@ -96,6 +96,18 @@ CREATE TABLE IF NOT EXISTS asistentes (
 )
 """)
 
+# 3b. Tabla Anotaciones Estudiante
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS anotaciones_estudiante (
+    id TEXT PRIMARY KEY,
+    rut_estudiante TEXT,
+    fecha TEXT,
+    tipo TEXT,
+    detalle TEXT,
+    autor TEXT
+)
+""")
+
 # 4. Tabla Entrevistas
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS entrevistas (

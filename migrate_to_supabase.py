@@ -47,6 +47,16 @@ SCHEMAS = {
             idoneidad TEXT
         );
     """,
+    "anotaciones_estudiante": """
+        CREATE TABLE IF NOT EXISTS anotaciones_estudiante (
+            id TEXT PRIMARY KEY,
+            rut_estudiante TEXT,
+            fecha TEXT,
+            tipo TEXT,
+            detalle TEXT,
+            autor TEXT
+        );
+    """,
     "asistentes": """
         CREATE TABLE IF NOT EXISTS asistentes (
             rut TEXT PRIMARY KEY,
