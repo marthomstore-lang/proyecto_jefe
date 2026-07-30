@@ -3965,7 +3965,111 @@ function eliminarAdjuntoForm(idx) {
   renderAdjuntosForm();
 }
 
-function renderEvidenciasPage() {
+// ── CARPETAS PRINCIPALES DE GOOGLE DRIVE ──
+function getCarpetasPrincipalesDrive() {
+  const data = localStorage.getItem('campanario_master_drive_folders');
+  if (data) {
+    try { return JSON.parse(data); } catch (e) {}
+  }
+  // Carpetas por defecto si no existen
+  return [
+    {
+      id: 'default-1',
+      title: '📁 Unidad Compartida Evidencias 2026',
+      url: 'https://drive.google.com',
+      date: '2026-07-30'
+    },
+    {
+      id: 'default-2',
+      title: '📁 Carpetas de Expedientes y Fichas de Estudiantes',
+      url: 'https://drive.google.com',
+      date: '2026-07-30'
+    }
+  ];
+}
+
+function renderCarpetasPrincipalesDrive() {
+  const container = document.getElementById('grid-carpetas-principales');
+  if (!container) return;
+  
+  const folders = getCarpetasPrincipalesDrive();
+  if (folders.length === 0) {
+    container.innerHTML = `<span style="font-size: 13px; color: var(--text-secondary); font-style: italic; grid-column: 1/-1;">No hay carpetas principales vinculadas aún. Haga clic en "Agregar Carpeta de Drive" para agregar una.</span>`;
+    return;
+  }
+  
+  container.innerHTML = folders.map(f => `
+    <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; transition: transform 0.2s, box-shadow 0.2s; box-shadow: var(--shadow-sm);">
+      <div style="display: flex; align-items: flex-start; gap: 10px;">
+        <span style="font-size: 26px;">📁</span>
+        <div style="min-width: 0; flex: 1;">
+          <strong style="font-size: 14px; font-weight: 700; color: var(--text-primary); display: block; margin-bottom: 2px;">${esc(f.title)}</strong>
+          <a href="${esc(f.url)}" target="_blank" style="font-size: 11.5px; color: var(--primary, #4f46e5); text-decoration: none; word-break: break-all;">🔗 ${esc(f.url)}</a>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px;">
+        <a href="${esc(f.url)}" target="_blank" class="btn btn-primary btn-sm" style="text-decoration: none; font-size: 12px; padding: 5px 12px;">🔗 Abrir en Google Drive</a>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="eliminarCarpetaDrivePrincipal('${esc(f.id)}')" style="padding: 5px 8px; font-size: 11px; color: #ef4444;" title="Eliminar carpeta del listado">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleFormNuevaCarpetaDrive() {
+  const form = document.getElementById('form-nueva-carpeta-drive');
+  if (form) {
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  }
+}
+
+function guardarCarpetaDrivePrincipal() {
+  const titleEl = document.getElementById('drive-folder-title');
+  const urlEl = document.getElementById('drive-folder-url');
+  
+  const title = (titleEl ? titleEl.value : '').trim();
+  const url = (urlEl ? urlEl.value : '').trim();
+  
+  if (!url) {
+    toast('⚠️ Ingrese el enlace de Google Drive');
+    return;
+  }
+  
+  const folders = getCarpetasPrincipalesDrive();
+  folders.push({
+    id: 'folder-' + Date.now(),
+    title: title || '📁 Carpeta Google Drive',
+    url: url,
+    date: new Date().toISOString().split('T')[0]
+  });
+  
+  localStorage.setItem('campanario_master_drive_folders', JSON.stringify(folders));
+  
+  if (titleEl) titleEl.value = '';
+  if (urlEl) urlEl.value = '';
+  toggleFormNuevaCarpetaDrive();
+  renderCarpetasPrincipalesDrive();
+  toast('📁 Carpeta principal vinculada correctamente');
+}
+
+function eliminarCarpetaDrivePrincipal(id) {
+  let folders = getCarpetasPrincipalesDrive();
+  folders = folders.filter(f => f.id !== id);
+  localStorage.setItem('campanario_master_drive_folders', JSON.stringify(folders));
+  renderCarpetasPrincipalesDrive();
+  toast('🗑️ Carpeta eliminada del panel principal');
+}
+
+async function renderEvidenciasPage() {
+  renderCarpetasPrincipalesDrive();
+  
+  if (!entrevistas || entrevistas.length === 0) {
+    try {
+      const res = await fetch('/api/entrevistas');
+      entrevistas = await res.json();
+    } catch (err) {
+      console.error("Error al cargar entrevistas para evidencias:", err);
+    }
+  }
   filtrarEvidencias();
 }
 
@@ -3978,7 +4082,7 @@ function filtrarEvidencias() {
   let rowsHtml = '';
   let count = 0;
   
-  entrevistas.forEach(e => {
+  (entrevistas || []).forEach(e => {
     const adjuntoVal = e.adjunto || parseObsMetadata(e.obs).adjunto;
     if (!adjuntoVal) return;
     
@@ -3990,7 +4094,7 @@ function filtrarEvidencias() {
         : `<span class="badge" style="background: #f1f5f9; color: #334155; font-weight: 700;">📄 Documento</span>`;
         
       const docName = item.name || (isFolder ? 'Carpeta Google Drive' : 'Documento Evidencia');
-      const textToSearch = `${docName} ${e.rut} ${e.nombre} ${e.curso} ${e.id}`.toLowerCase();
+      const textToSearch = `${docName} ${e.rut} ${e.nombre} ${e.curso} ${e.id} ${e.cargo}`.toLowerCase();
       
       if (q && !textToSearch.includes(q)) return;
       
@@ -4002,11 +4106,14 @@ function filtrarEvidencias() {
             <strong style="font-size:13.5px; color:var(--text-primary); display:block;">${esc(docName)}</strong>
             <a href="${esc(item.url)}" target="_blank" style="font-size:11.5px; color:var(--primary, #4f46e5); text-decoration:none;">🔗 ${esc(item.url)}</a>
           </td>
-          <td><span style="font-weight:700;">${esc(e.id)}</span><br><span style="font-family:monospace; font-size:12px; color:var(--text-secondary);">${esc(e.rut)}</span></td>
-          <td><strong>${esc(e.nombre)}</strong></td>
+          <td><span style="font-weight:700;">${esc(e.id)}</span><br><span style="font-size:12px; color:var(--text-secondary);">${esc(e.fecha || '')}</span></td>
+          <td><strong>${esc(e.nombre)}</strong><br><span style="font-family:monospace; font-size:11.5px; color:var(--text-secondary);">${esc(e.rut)}</span></td>
           <td>${esc(e.cargo)} — ${esc(e.curso)}</td>
           <td>
-            <a href="${esc(item.url)}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration:none;">🔗 Abrir Enlace</a>
+            <div style="display: flex; gap: 6px;">
+              <a href="${esc(item.url)}" target="_blank" class="btn btn-primary btn-sm" style="text-decoration:none; font-size:12px;">🔗 Abrir Enlace</a>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="cargarReporteDesdeHash('${esc(e.id)}')" style="font-size:12px;">📝 Ver Ficha</button>
+            </div>
           </td>
         </tr>
       `;
@@ -4017,7 +4124,7 @@ function filtrarEvidencias() {
     tbody.innerHTML = `
       <tr>
         <td colspan="6" style="text-align: center; padding: 32px; color: var(--text-secondary);">
-          ${q ? 'No se encontraron documentos que coincidan con la búsqueda.' : 'No hay documentos ni carpetas Drive adjuntas registradas en las entrevistas.'}
+          ${q ? 'No se encontraron documentos que coincidan con la búsqueda.' : 'No hay documentos ni carpetas Drive adjuntas registradas en las entrevistas aún.'}
         </td>
       </tr>
     `;
