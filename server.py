@@ -210,9 +210,14 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def send_json(self, data, status=200):
+        try:
+            response_bytes = json.dumps(data, ensure_ascii=False, default=str).encode('utf-8')
+        except Exception as e:
+            response_bytes = json.dumps({"error": f"JSON Serialization Error: {str(e)}"}).encode('utf-8')
+            status = 500
+
         self.send_response(status)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
-        response_bytes = json.dumps(data, ensure_ascii=False).encode('utf-8')
         self.send_header('Content-Length', str(len(response_bytes)))
         self.end_headers()
         self.wfile.write(response_bytes)
@@ -264,18 +269,26 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
             self.send_error(500, f"Internal Server Error: {str(e)}")
 
     def handle_api_get(self, path, query):
-        if path == '/api/multivista/live':
-            session = query.get('session', [''])[0].strip()
-            self.send_json(active_sessions.get(session, {}))
-            return
-        elif path == '/api/multivista/info':
-            self.send_json({"ip": get_local_ip(), "port": PORT})
-            return
-
-        conn = get_db_connection()
-        cursor = get_db_cursor(conn)
-        
+        conn = None
         try:
+            if path == '/api/multivista/live':
+                session = query.get('session', [''])[0].strip()
+                self.send_json(active_sessions.get(session, {}))
+                return
+            elif path == '/api/multivista/info':
+                self.send_json({"ip": get_local_ip(), "port": PORT})
+                return
+            elif path == '/api/config/logo':
+                logo_path = os.path.join(PUBLIC_DIR, 'uploads', 'logo.png')
+                if os.path.exists(logo_path):
+                    self.send_json({"success": True, "logo_url": "/uploads/logo.png"})
+                else:
+                    self.send_json({"success": True, "logo_url": None})
+                return
+
+            conn = get_db_connection()
+            cursor = get_db_cursor(conn)
+            
             if path == '/api/usuarios':
                 cursor.execute("SELECT * FROM usuarios")
                 self.send_json([dict(row) for row in cursor.fetchall()])
@@ -559,7 +572,8 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": str(e)}, status=500)
         finally:
-            release_db_connection(conn)
+            if conn:
+                release_db_connection(conn)
 
     def do_POST(self):
         parsed_url = urlparse(self.path)
@@ -575,7 +589,67 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "Invalid JSON Body"}, status=400)
             return
 
-        if path == '/api/multivista/update':
+        if path == '/api/upload':
+            filename = body.get("filename", "archivo.dat")
+            base64_data = body.get("base64Data", "")
+            if not base64_data:
+                self.send_json({"success": False, "error": "Falta contenido base64Data"}, status=400)
+                return
+            
+            import base64, time, re
+            uploads_dir = os.path.join(PUBLIC_DIR, 'uploads')
+            os.makedirs(uploads_dir, exist_ok=True)
+            
+            # Sanitizar nombre de archivo
+            clean_name = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', filename)
+            timestamp = int(time.time())
+            saved_filename = f"{timestamp}_{clean_name}"
+            target_path = os.path.join(uploads_dir, saved_filename)
+            
+            try:
+                # Decodificar base64 (removiendo prefijo data:image/png;base64, si existe)
+                if ',' in base64_data:
+                    base64_data = base64_data.split(',', 1)[1]
+                file_bytes = base64.b64decode(base64_data)
+                with open(target_path, 'wb') as f:
+                    f.write(file_bytes)
+                
+                url = f"/uploads/{saved_filename}"
+                self.send_json({"success": True, "url": url, "filename": clean_name})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)}, status=500)
+            return
+
+        elif path == '/api/config/logo':
+            base64_data = body.get("base64Data", "")
+            logo_url = body.get("logoUrl", "")
+            
+            import base64
+            uploads_dir = os.path.join(PUBLIC_DIR, 'uploads')
+            os.makedirs(uploads_dir, exist_ok=True)
+            logo_path = os.path.join(uploads_dir, 'logo.png')
+            
+            try:
+                if base64_data:
+                    if ',' in base64_data:
+                        base64_data = base64_data.split(',', 1)[1]
+                    file_bytes = base64.b64decode(base64_data)
+                    with open(logo_path, 'wb') as f:
+                        f.write(file_bytes)
+                    url = "/uploads/logo.png"
+                elif logo_url == "RESET":
+                    if os.path.exists(logo_path):
+                        os.remove(logo_path)
+                    url = None
+                else:
+                    url = logo_url
+                
+                self.send_json({"success": True, "logo_url": url})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)}, status=500)
+            return
+
+        elif path == '/api/multivista/update':
             session_id = body.get("sessionId")
             if session_id:
                 active_sessions[session_id] = body
@@ -1071,6 +1145,15 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
 def run_server():
     # Asegurarse que el directorio public existe
     os.makedirs(PUBLIC_DIR, exist_ok=True)
+    
+    # Sincronizar datos de Supabase si estamos en modo SQLite
+    if DB_ENGINE == "sqlite":
+        try:
+            from sync_from_supabase import sync_from_supabase
+            sync_from_supabase()
+        except Exception as e:
+            print(f"Aviso: No se pudo sincronizar automáticamente con Supabase ({e}). Se usarán los datos locales existentes.")
+
     
     # Asegurarse de que la tabla de usuarios esté creada e inicializada
     try:

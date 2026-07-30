@@ -30,7 +30,10 @@
 <!-- HEADER -->
 <header>
   <button class="menu-btn" onclick="toggleSidebar()" aria-label="Menú">&#9776;</button>
-  <span class="logo">🏫 Liceo Técnico Profesional Campanario</span>
+  <span class="logo" style="display: inline-flex; align-items: center; gap: 10px;">
+    <img id="header-logo-img" src="" alt="Logo Institucional" style="display:none; max-height: 38px; max-width: 110px; object-fit: contain; background: rgba(255,255,255,0.15); border-radius: 6px; padding: 2px;">
+    <span id="header-logo-text">🏫 Liceo Técnico Profesional Campanario</span>
+  </span>
   <span class="subtitle">RBD 3941 · Sistema Integral 2026</span>
   
   <div class="user-info">
@@ -80,6 +83,7 @@
     <div class="nav-label">Entrevistas</div>
     <div class="nav-item" onclick="limpiarForm(); goTo('nueva-entrevista')"><span class="icon">📝</span> Nueva entrevista</div>
     <div class="nav-item" onclick="goTo('historial')"><span class="icon">🕘</span> Historial <span class="badge-count" id="cnt-ent">0</span></div>
+    <div class="nav-item" onclick="goTo('evidencias')"><span class="icon">📂</span> Evidencias y Drive</div>
     <div class="nav-item" onclick="goTo('reporte')"><span class="icon">📄</span> Ficha Impresión</div>
   </div>
   
@@ -88,6 +92,7 @@
   <div class="nav-section">
     <div class="nav-label">Utilidades</div>
     <div class="nav-item" onclick="goTo('agregar-persona')"><span class="icon">➕</span> Agregar persona</div>
+    <div class="nav-item" onclick="abrirModalLogo()"><span class="icon">🖼️</span> Cambiar Logo</div>
     <div class="nav-item" onclick="exportarDatos()"><span class="icon">💾</span> Exportar datos</div>
     <div class="nav-item" id="nav-config" onclick="goTo('configuracion')" style="display: none;"><span class="icon">⚙️</span> Configuración</div>
   </div>
@@ -618,12 +623,28 @@
         <label>Fecha próxima revisión (Seguimiento)</label>
         <input type="date" id="e-seguimiento">
       </div>
-      <div class="form-group">
-        <label>Enlace de Evidencia / Google Drive</label>
-        <div style="display: flex; gap: 8px; margin-top: 6px;">
-          <input id="e-adjunto" placeholder="Pegue el enlace o suba un archivo..." style="flex: 1; margin: 0; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px;">
-          <input type="file" id="e-file-upload" style="display: none;" onchange="subirArchivoADrive(this)">
-          <button type="button" class="btn btn-secondary" style="padding: 10px 18px;" onclick="document.getElementById('e-file-upload').click()" id="btn-upload-file">📁 Subir</button>
+      <div class="form-group" style="grid-column: span 2;" id="e-adjunto-section">
+        <label style="display:flex; justify-content:space-between; align-items:center; font-weight:700;">
+          <span>📂 Evidencias / Documentos y Carpetas Google Drive</span>
+          <span style="font-size:12px; font-weight:normal; color:var(--text-secondary);">Suba archivos o pegue enlaces de carpetas Drive</span>
+        </label>
+        
+        <div style="background: var(--bg-body, #f8fafc); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; margin-top: 6px;">
+          <!-- Ingreso de enlace / archivo -->
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <input id="e-adjunto-url" placeholder="Pegue enlace de archivo o carpeta Google Drive..." style="flex: 2; min-width: 200px; margin: 0; padding: 9px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-card);">
+            <input id="e-adjunto-nombre" placeholder="Nombre o título opcional..." style="flex: 1; min-width: 140px; margin: 0; padding: 9px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-card);">
+            <button type="button" class="btn btn-secondary" onclick="agregarEnlaceAdjuntoForm()" style="padding: 9px 14px; font-size: 13px;">🔗 Agregar Link</button>
+            
+            <input type="file" id="e-file-upload-local" style="display: none;" onchange="subirArchivoLocalForm(this)">
+            <button type="button" class="btn btn-primary" onclick="document.getElementById('e-file-upload-local').click()" id="btn-upload-file-local" style="padding: 9px 14px; font-size: 13px;">📁 Subir Archivo</button>
+          </div>
+          
+          <!-- Campo oculto para mantener compatibilidad -->
+          <input type="hidden" id="e-adjunto">
+          
+          <!-- Lista / Galería de documentos adjuntos actuales -->
+          <div id="e-adjuntos-list" style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;"></div>
         </div>
       </div>
     </div>
@@ -999,6 +1020,57 @@
         </tbody>
       </table>
     </div>
+  <div class="card" style="margin-top: 24px;">
+    <div class="card-title">🖼️ Identidad Institucional — Logo del Liceo</div>
+    <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-top: 16px;">
+      <div style="width: 140px; height: 90px; border: 2px dashed var(--border); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; background: var(--bg-body); padding: 6px;" id="config-logo-preview-box">
+        <img id="config-logo-preview" src="" alt="Vista previa" style="max-width: 100%; max-height: 100%; object-fit: contain; display: none;">
+        <span id="config-logo-placeholder" style="font-size: 12px; color: var(--text-secondary); text-align: center;">Sin Logo Personalizado</span>
+      </div>
+      <div style="flex: 1; min-width: 240px;">
+        <p style="font-size: 13.5px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5;">
+          El logo que suba aquí se mostrará en el encabezado del sistema y se imprimirá de forma oficial en todas las fichas de entrevista, reportes e informes institucionales.
+        </p>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <input type="file" id="config-logo-file" accept="image/*" style="display: none;" onchange="subirLogoDesdeConfig(this)">
+          <button type="button" class="btn btn-primary" onclick="document.getElementById('config-logo-file').click()"><span class="icon">📁</span> Subir Nuevo Logo</button>
+          <button type="button" class="btn btn-secondary" onclick="resetearLogo()"><span class="icon">↺</span> Restablecer por Defecto</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ CENTRO DE EVIDENCIAS Y DOCUMENTOS ══════════════ -->
+<div class="page" id="pg-evidencias">
+  <div class="welcome-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%)">
+    <h1>📂 Centro de Documentos y Evidencias</h1>
+    <p>Consulte, gestione y abra directamente todos los archivos subidos o carpetas compartidas de Google Drive en el sistema.</p>
+  </div>
+
+  <div class="card">
+    <div style="display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 16px;">
+      <input id="search-evidencias" placeholder="🔍 Buscar por RUT, nombre de persona, título de documento o carpeta..." oninput="filtrarEvidencias()" style="flex: 1; min-width: 250px; padding: 10px 14px; margin: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px;">
+      <button class="btn btn-primary" onclick="limpiarForm(); goTo('nueva-entrevista')"><span class="icon">📝</span> Nueva Entrevista con Evidencias</button>
+    </div>
+    
+    <div class="tbl-wrap">
+      <table id="tbl-evidencias">
+        <thead>
+          <tr>
+            <th>Tipo</th>
+            <th>Documento / Enlace Drive</th>
+            <th>Entrevista / RUT</th>
+            <th>Nombre Persona</th>
+            <th>Cargo / Estamento</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody id="tbl-evidencias-body">
+          <!-- Se cargará dinámicamente -->
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -1282,6 +1354,31 @@
   </div>
 </div>
 
+
+<!-- MODAL CAMBIAR LOGO INSTITUCIONAL -->
+<div class="modal-bg" id="modal-logo" style="z-index: 1200;">
+  <div class="modal" style="max-width: 480px; padding: 24px;">
+    <div class="modal-header">
+      <div class="modal-title">🖼️ Cambiar Logo Institucional</div>
+      <button class="modal-close" onclick="cerrarModalLogo()">✖</button>
+    </div>
+    <div style="text-align: center; margin-bottom: 20px;">
+      <div style="width: 160px; height: 100px; border: 2px dashed var(--border); border-radius: var(--radius-sm); margin: 0 auto 16px auto; display: flex; align-items: center; justify-content: center; background: var(--bg-body); padding: 8px;" id="modal-logo-preview-box">
+        <img id="modal-logo-preview" src="" alt="Vista Previa Logo" style="max-width: 100%; max-height: 100%; object-fit: contain; display: none;">
+        <span id="modal-logo-placeholder" style="font-size: 12px; color: var(--text-secondary);">Sin Logo Cargado</span>
+      </div>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+        Seleccione una imagen (PNG, JPG, SVG) para usar como isotipo/logo del liceo en todo el sistema e impresiones.
+      </p>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <input type="file" id="modal-logo-file" accept="image/*" style="display: none;" onchange="subirLogoDesdeModal(this)">
+      <button type="button" class="btn btn-primary" onclick="document.getElementById('modal-logo-file').click()" style="width: 100%; justify-content: center;"><span class="icon">📁</span> Seleccionar Archivo de Logo</button>
+      <button type="button" class="btn btn-secondary" onclick="resetearLogo()" style="width: 100%; justify-content: center;"><span class="icon">↺</span> Usar Logo por Defecto</button>
+      <button type="button" class="btn btn-secondary" onclick="cerrarModalLogo()" style="width: 100%; justify-content: center; margin-top: 4px;">Cerrar</button>
+    </div>
+  </div>
+</div>
 
 <script src="logic.js?v=2.5" defer></script>
 </body>

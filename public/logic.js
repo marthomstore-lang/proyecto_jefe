@@ -601,7 +601,8 @@ function goTo(page) {
   if (pageName === 'asistentes') { initAsiFiltros(); filtrarAsi(); }
   if (pageName === 'historial') { filtrarHistorial(); }
   if (pageName === 'administracion') { renderAdmin(); }
-  if (pageName === 'configuracion') { renderConfiguracion(); }
+  if (pageName === 'configuracion') { renderConfiguracion(); actualizarVistaLogo(); }
+  if (pageName === 'evidencias') { renderEvidenciasPage(); }
   if (pageName === 'anotaciones-global') { filtrarAnotacionesGlobal(); }
   if (pageName === 'nueva-entrevista') {
     const params = new URLSearchParams(queryString || '');
@@ -1505,10 +1506,12 @@ function previsualizar() {
 }
 
 function limpiarForm() {
-  ['e-rut', 'e-nombre', 'e-cargo', 'e-curso', 'e-jefe', 'e-asig', 'e-pie', 'e-resp', 'e-objetivo', 'e-motivo', 'e-acuerdos', 'e-obs', 'e-adjunto'].forEach(id => {
+  ['e-rut', 'e-nombre', 'e-cargo', 'e-curso', 'e-jefe', 'e-asig', 'e-pie', 'e-resp', 'e-objetivo', 'e-motivo', 'e-acuerdos', 'e-obs', 'e-adjunto', 'e-adjunto-url', 'e-adjunto-nombre'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  currentAdjuntosList = [];
+  renderAdjuntosForm();
   document.getElementById('e-estado').value = 'Abierta';
   const priv = document.getElementById('e-privacidad');
   if (priv) priv.value = 'Publica';
@@ -1862,7 +1865,9 @@ async function cargarEntrevistaParaEditarDirecto(id) {
   
   const meta = parseObsMetadata(e.obs);
   document.getElementById('e-obs').value = meta.obs;
-  document.getElementById('e-adjunto').value = meta.adjunto || '';
+  const adjuntoVal = e.adjunto || meta.adjunto || '';
+  currentAdjuntosList = parseAdjuntos(adjuntoVal);
+  renderAdjuntosForm();
   
   if (meta.creador) {
     document.getElementById('e-privacidad').value = 'Confidencial';
@@ -2579,24 +2584,64 @@ function generarHtmlReporte(e, tieneAcceso, participantes = []) {
   }
 
   const adjunto = e.adjunto || meta.adjunto;
+  const adjuntosList = parseAdjuntos(adjunto);
   let adjuntoHtml = '';
-  if (adjunto && tieneAcceso) {
+  if (adjuntosList.length > 0 && tieneAcceso) {
     adjuntoHtml = `
       <div class="rpt-row full no-print" style="border-bottom: 1px solid #94a3b8;">
-        <div class="rpt-cell rpt-label">Documentación Adjunta</div>
-        <div class="rpt-cell" style="min-height:36px; display: flex; align-items: center; padding: 10px 14px;">
-          <a href="${esc(adjunto)}" target="_blank" style="color: var(--primary, #4f46e5); font-weight: 600; text-decoration: none;">🔗 Ver documento en Google Drive / Evidencia</a>
+        <div class="rpt-cell rpt-label">Documentación y Evidencias (${adjuntosList.length})</div>
+        <div class="rpt-cell" style="min-height:36px; padding: 10px 14px;">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            ${adjuntosList.map(item => {
+              const isFolder = item.type === 'folder' || (item.url && item.url.includes('drive.google.com/drive/folders'));
+              const icon = isFolder ? '📁' : '📄';
+              const labelName = item.name || (isFolder ? 'Carpeta Evidencias Google Drive' : 'Ver documento / Evidencia');
+              return `
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 16px;">${icon}</span>
+                    <strong style="font-size: 13px; color: #1e293b;">${esc(labelName)}</strong>
+                  </div>
+                  <a href="${esc(item.url)}" target="_blank" style="color: var(--primary, #4f46e5); font-weight: 600; text-decoration: none; font-size: 12px;">🔗 Abrir Enlace</a>
+                </div>
+              `;
+            }).join('')}
+          </div>
         </div>
+      </div>
+    `;
+  }
+
+  const logoUrl = getLogoUrl();
+  let logoHeaderHtml = '';
+  if (logoUrl) {
+    logoHeaderHtml = `
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid var(--primary, #4f46e5); padding-bottom: 12px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <img src="${esc(logoUrl)}" alt="Logo Institucional" style="max-height: 60px; max-width: 150px; object-fit: contain;">
+          <div>
+            <h2 style="font-size:18px; margin:0; font-family:var(--font-title); font-weight:800; color:#0f172a;">Ficha de Entrevista Institucional</h2>
+            <span style="font-size:12px; font-weight:600; color:var(--text-secondary,#64748b);">Liceo Técnico Profesional Campanario — RBD 3941</span>
+          </div>
+        </div>
+        <div style="text-align: right; font-size: 11px; color: #64748b; border-left: 1px solid #cbd5e1; padding-left: 12px;">
+          <strong style="color: #1e293b;">DOCUMENTO OFICIAL</strong><br>
+          <span>Sistema Integral 2026</span>
+        </div>
+      </div>
+    `;
+  } else {
+    logoHeaderHtml = `
+      <div class="rpt-title">
+        <h2 style="font-size:18px; margin-bottom:6px; font-family:var(--font-title); font-weight:800">Ficha de Entrevista Institucional</h2>
+        <strong style="font-size:12px; color:var(--text-secondary)">Liceo Técnico Profesional Campanario — RBD 3941</strong>
       </div>
     `;
   }
   
   return `
     <div class="report-block">
-      <div class="rpt-title">
-        <h2 style="font-size:18px; margin-bottom:6px; font-family:var(--font-title); font-weight:800">Ficha de Entrevista Institucional</h2>
-        <strong style="font-size:12px; color:var(--text-secondary)">Liceo Técnico Profesional Campanario — RBD 3941</strong>
-      </div>
+      ${logoHeaderHtml}
       
       ${bannerPrivado}
       
@@ -3638,5 +3683,350 @@ function cargarEstudiantesPorCursoAnotacion() {
       filtered.map(s => `<option value="${esc(s.RUT)}">${esc(s.Nombres)} ${esc(s['Apellido Paterno'])} (${esc(s.Curso)}) - ${esc(s.RUT)}</option>`).join('');
   }
 }
+
+
+// ══════════════════════════════════════════════════════════════════════
+// 🖼️ GESTIÓN DE LOGO INSTITUCIONAL Y 📂 DOCUMENTOS / EVIDENCIAS
+// ══════════════════════════════════════════════════════════════════════
+
+let currentLogoUrl = null;
+let currentAdjuntosList = [];
+
+function getLogoUrl() {
+  return currentLogoUrl || localStorage.getItem('campanario_logo') || null;
+}
+
+async function cargarLogoInstitucional() {
+  try {
+    const res = await fetch('/api/config/logo');
+    const data = await res.json();
+    if (data && data.success && data.logo_url) {
+      currentLogoUrl = data.logo_url;
+      localStorage.setItem('campanario_logo', data.logo_url);
+    } else {
+      currentLogoUrl = localStorage.getItem('campanario_logo') || null;
+    }
+  } catch (err) {
+    currentLogoUrl = localStorage.getItem('campanario_logo') || null;
+  }
+  actualizarVistaLogo();
+}
+
+function actualizarVistaLogo() {
+  const url = getLogoUrl();
+  const headerImg = document.getElementById('header-logo-img');
+  
+  if (url && headerImg) {
+    headerImg.src = url;
+    headerImg.style.display = 'inline-block';
+  } else if (headerImg) {
+    headerImg.style.display = 'none';
+  }
+  
+  const configPreview = document.getElementById('config-logo-preview');
+  const configPlaceholder = document.getElementById('config-logo-placeholder');
+  if (configPreview && configPlaceholder) {
+    if (url) {
+      configPreview.src = url;
+      configPreview.style.display = 'block';
+      configPlaceholder.style.display = 'none';
+    } else {
+      configPreview.style.display = 'none';
+      configPlaceholder.style.display = 'block';
+    }
+  }
+  
+  const modalPreview = document.getElementById('modal-logo-preview');
+  const modalPlaceholder = document.getElementById('modal-logo-placeholder');
+  if (modalPreview && modalPlaceholder) {
+    if (url) {
+      modalPreview.src = url;
+      modalPreview.style.display = 'block';
+      modalPlaceholder.style.display = 'none';
+    } else {
+      modalPreview.style.display = 'none';
+      modalPlaceholder.style.display = 'block';
+    }
+  }
+}
+
+async function subirLogoProceso(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async function() {
+    const base64Data = reader.result;
+    try {
+      const res = await fetch('/api/config/logo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64Data: base64Data })
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        currentLogoUrl = data.logo_url || base64Data;
+        localStorage.setItem('campanario_logo', currentLogoUrl);
+        actualizarVistaLogo();
+        toast('🖼️ Logo institucional cargado y guardado correctamente');
+      } else {
+        toast('❌ Error al subir logo: ' + (data.error || 'Desconocido'));
+      }
+    } catch (err) {
+      console.error('Error al guardar logo:', err);
+      currentLogoUrl = base64Data;
+      localStorage.setItem('campanario_logo', base64Data);
+      actualizarVistaLogo();
+      toast('🖼️ Logo institucional actualizado localmente');
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function subirLogoDesdeConfig(input) {
+  if (input.files && input.files[0]) {
+    subirLogoProceso(input.files[0]);
+    input.value = '';
+  }
+}
+
+function subirLogoDesdeModal(input) {
+  if (input.files && input.files[0]) {
+    subirLogoProceso(input.files[0]);
+    input.value = '';
+    cerrarModalLogo();
+  }
+}
+
+async function resetearLogo() {
+  try {
+    await fetch('/api/config/logo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ logoUrl: 'RESET' })
+    });
+  } catch (err) {}
+  
+  currentLogoUrl = null;
+  localStorage.removeItem('campanario_logo');
+  actualizarVistaLogo();
+  toast('↺ Logo restablecido al valor por defecto');
+}
+
+function abrirModalLogo() {
+  actualizarVistaLogo();
+  const m = document.getElementById('modal-logo');
+  if (m) m.classList.add('open');
+}
+
+function cerrarModalLogo() {
+  const m = document.getElementById('modal-logo');
+  if (m) m.classList.remove('open');
+}
+
+// ── MANEJO DE ADJUNTOS / DOCUMENTOS Y DRIVE ──
+function parseAdjuntos(adjuntoVal) {
+  if (!adjuntoVal) return [];
+  if (typeof adjuntoVal === 'object' && Array.isArray(adjuntoVal)) return adjuntoVal;
+  
+  adjuntoVal = String(adjuntoVal).trim();
+  if (!adjuntoVal) return [];
+  
+  if (adjuntoVal.startsWith('[') && adjuntoVal.endsWith(']')) {
+    try {
+      return JSON.parse(adjuntoVal);
+    } catch (err) {}
+  }
+  
+  const urls = adjuntoVal.split(',').map(u => u.trim()).filter(Boolean);
+  return urls.map(url => {
+    let type = 'link';
+    let name = 'Documento / Evidencia Drive';
+    if (url.includes('drive.google.com/drive/folders')) {
+      type = 'folder';
+      name = '📁 Carpeta de Evidencias Google Drive';
+    } else if (url.includes('drive.google.com')) {
+      type = 'file';
+      name = '📄 Archivo Google Drive';
+    } else if (url.startsWith('/uploads/')) {
+      type = 'file';
+      name = '📁 Archivo ' + url.split('/').pop().replace(/^\d+_/, '');
+    }
+    return { name, url, type, date: new Date().toISOString().split('T')[0] };
+  });
+}
+
+function renderAdjuntosForm() {
+  const container = document.getElementById('e-adjuntos-list');
+  const hiddenInput = document.getElementById('e-adjunto');
+  if (!container || !hiddenInput) return;
+  
+  hiddenInput.value = currentAdjuntosList.length > 0 ? JSON.stringify(currentAdjuntosList) : '';
+  
+  if (currentAdjuntosList.length === 0) {
+    container.innerHTML = `<span style="font-size: 12px; color: var(--text-secondary); font-style: italic;">No hay documentos ni carpetas adjuntas en esta entrevista.</span>`;
+    return;
+  }
+  
+  container.innerHTML = currentAdjuntosList.map((item, idx) => {
+    const isFolder = item.type === 'folder' || (item.url && item.url.includes('drive.google.com/drive/folders'));
+    const icon = isFolder ? '📁' : '📄';
+    const itemTitle = esc(item.name || (isFolder ? 'Carpeta Google Drive' : 'Documento Evidencia'));
+    const itemUrl = esc(item.url);
+    
+    return `
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;">
+        <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
+          <span style="font-size: 16px;">${icon}</span>
+          <div style="display: flex; flex-direction: column; min-width: 0;">
+            <strong style="font-size: 13px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${itemTitle}</strong>
+            <a href="${itemUrl}" target="_blank" style="font-size: 11.5px; color: var(--primary, #4f46e5); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">🔗 ${itemUrl}</a>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <a href="${itemUrl}" target="_blank" class="btn btn-secondary btn-sm" style="padding: 4px 8px; font-size: 11px; text-decoration: none;">🔗 Abrir</a>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="eliminarAdjuntoForm(${idx})" style="padding: 4px 8px; font-size: 11px; color: #ef4444;" title="Eliminar">🗑️</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function agregarEnlaceAdjuntoForm() {
+  const urlEl = document.getElementById('e-adjunto-url');
+  const nameEl = document.getElementById('e-adjunto-nombre');
+  const url = (urlEl ? urlEl.value : '').trim();
+  let name = (nameEl ? nameEl.value : '').trim();
+  
+  if (!url) {
+    toast('⚠️ Ingrese un enlace de Google Drive o documento');
+    return;
+  }
+  
+  const isFolder = url.includes('drive.google.com/drive/folders');
+  if (!name) {
+    name = isFolder ? '📁 Carpeta de Evidencias Google Drive' : '🔗 Documento / Evidencia Drive';
+  }
+  
+  currentAdjuntosList.push({
+    name: name,
+    url: url,
+    type: isFolder ? 'folder' : 'link',
+    date: new Date().toISOString().split('T')[0]
+  });
+  
+  if (urlEl) urlEl.value = '';
+  if (nameEl) nameEl.value = '';
+  renderAdjuntosForm();
+  toast('✅ Documento/Enlace agregado correctamente');
+}
+
+async function subirArchivoLocalForm(input) {
+  const file = input.files[0];
+  if (!file) return;
+  
+  const btn = document.getElementById('btn-upload-file-local');
+  const origText = btn ? btn.innerHTML : '';
+  if (btn) { btn.innerHTML = '⏳ Subiendo...'; btn.disabled = true; }
+  
+  const reader = new FileReader();
+  reader.onload = async function() {
+    const base64Data = reader.result;
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, base64Data: base64Data })
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        currentAdjuntosList.push({
+          name: file.name,
+          url: data.url,
+          type: 'file',
+          date: new Date().toISOString().split('T')[0]
+        });
+        renderAdjuntosForm();
+        toast('📁 Archivo subido con éxito al servidor');
+      } else {
+        toast('❌ Error al subir archivo: ' + (data.error || 'Desconocido'));
+      }
+    } catch (err) {
+      console.error('Error al subir archivo:', err);
+      toast('❌ Error de conexión al subir archivo');
+    } finally {
+      if (btn) { btn.innerHTML = origText; btn.disabled = false; }
+      input.value = '';
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function eliminarAdjuntoForm(idx) {
+  currentAdjuntosList.splice(idx, 1);
+  renderAdjuntosForm();
+}
+
+function renderEvidenciasPage() {
+  filtrarEvidencias();
+}
+
+function filtrarEvidencias() {
+  const qEl = document.getElementById('search-evidencias');
+  const q = (qEl ? qEl.value : '').trim().toLowerCase();
+  const tbody = document.getElementById('tbl-evidencias-body');
+  if (!tbody) return;
+  
+  let rowsHtml = '';
+  let count = 0;
+  
+  entrevistas.forEach(e => {
+    const adjuntoVal = e.adjunto || parseObsMetadata(e.obs).adjunto;
+    if (!adjuntoVal) return;
+    
+    const items = parseAdjuntos(adjuntoVal);
+    items.forEach(item => {
+      const isFolder = item.type === 'folder' || (item.url && item.url.includes('drive.google.com/drive/folders'));
+      const tipoBadge = isFolder 
+        ? `<span class="badge" style="background: #e0e7ff; color: #3730a3; font-weight: 700;">📁 Carpeta Drive</span>`
+        : `<span class="badge" style="background: #f1f5f9; color: #334155; font-weight: 700;">📄 Documento</span>`;
+        
+      const docName = item.name || (isFolder ? 'Carpeta Google Drive' : 'Documento Evidencia');
+      const textToSearch = `${docName} ${e.rut} ${e.nombre} ${e.curso} ${e.id}`.toLowerCase();
+      
+      if (q && !textToSearch.includes(q)) return;
+      
+      count++;
+      rowsHtml += `
+        <tr>
+          <td>${tipoBadge}</td>
+          <td>
+            <strong style="font-size:13.5px; color:var(--text-primary); display:block;">${esc(docName)}</strong>
+            <a href="${esc(item.url)}" target="_blank" style="font-size:11.5px; color:var(--primary, #4f46e5); text-decoration:none;">🔗 ${esc(item.url)}</a>
+          </td>
+          <td><span style="font-weight:700;">${esc(e.id)}</span><br><span style="font-family:monospace; font-size:12px; color:var(--text-secondary);">${esc(e.rut)}</span></td>
+          <td><strong>${esc(e.nombre)}</strong></td>
+          <td>${esc(e.cargo)} — ${esc(e.curso)}</td>
+          <td>
+            <a href="${esc(item.url)}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration:none;">🔗 Abrir Enlace</a>
+          </td>
+        </tr>
+      `;
+    });
+  });
+  
+  if (count === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; padding: 32px; color: var(--text-secondary);">
+          ${q ? 'No se encontraron documentos que coincidan con la búsqueda.' : 'No hay documentos ni carpetas Drive adjuntas registradas en las entrevistas.'}
+        </td>
+      </tr>
+    `;
+  } else {
+    tbody.innerHTML = rowsHtml;
+  }
+}
+
+// Inicializar logo al cargar
+cargarLogoInstitucional();
 
 
