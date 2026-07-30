@@ -4062,69 +4062,122 @@ function eliminarCarpetaDrivePrincipal(id) {
 async function renderEvidenciasPage() {
   renderCarpetasPrincipalesDrive();
   
-  if (!entrevistas || entrevistas.length === 0) {
-    try {
-      const res = await fetch('/api/entrevistas');
-      entrevistas = await res.json();
-    } catch (err) {
-      console.error("Error al cargar entrevistas para evidencias:", err);
-    }
+  const tbody = document.getElementById('tbl-evidencias-body');
+  if (tbody && (!Array.isArray(entrevistas) || entrevistas.length === 0)) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; padding: 32px; color: var(--text-secondary);">
+          <span style="font-size: 15px;">⏳ Cargando documentos y entrevistas desde la base de datos...</span>
+        </td>
+      </tr>
+    `;
   }
+  
+  try {
+    const res = await fetch('/api/entrevistas');
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      entrevistas = data;
+    } else if (data && Array.isArray(data.data)) {
+      entrevistas = data.data;
+    }
+  } catch (err) {
+    console.error("Error al cargar entrevistas para evidencias:", err);
+  }
+  
+  if (!Array.isArray(entrevistas)) {
+    entrevistas = [];
+  }
+  
   filtrarEvidencias();
 }
 
 function filtrarEvidencias() {
   const qEl = document.getElementById('search-evidencias');
+  const modoEl = document.getElementById('filter-evidencias-modo');
   const q = (qEl ? qEl.value : '').trim().toLowerCase();
+  const modo = modoEl ? modoEl.value : 'con_evidencia';
   const tbody = document.getElementById('tbl-evidencias-body');
   if (!tbody) return;
   
   let rowsHtml = '';
   let count = 0;
   
-  (entrevistas || []).forEach(e => {
-    const adjuntoVal = e.adjunto || parseObsMetadata(e.obs).adjunto;
-    if (!adjuntoVal) return;
+  const list = Array.isArray(entrevistas) ? entrevistas : [];
+  
+  list.forEach(e => {
+    if (!e || typeof e !== 'object') return;
     
+    const adjuntoVal = e.adjunto || parseObsMetadata(e.obs || '').adjunto;
     const items = parseAdjuntos(adjuntoVal);
-    items.forEach(item => {
-      const isFolder = item.type === 'folder' || (item.url && item.url.includes('drive.google.com/drive/folders'));
-      const tipoBadge = isFolder 
-        ? `<span class="badge" style="background: #e0e7ff; color: #3730a3; font-weight: 700;">📁 Carpeta Drive</span>`
-        : `<span class="badge" style="background: #f1f5f9; color: #334155; font-weight: 700;">📄 Documento</span>`;
+    
+    if (modo === 'con_evidencia' && (!adjuntoVal || items.length === 0)) {
+      return;
+    }
+    
+    if (items.length > 0) {
+      items.forEach(item => {
+        const isFolder = item.type === 'folder' || (item.url && item.url.includes('drive.google.com/drive/folders'));
+        const tipoBadge = isFolder 
+          ? `<span class="badge" style="background: #e0e7ff; color: #3730a3; font-weight: 700;">📁 Carpeta Drive</span>`
+          : `<span class="badge" style="background: #f1f5f9; color: #334155; font-weight: 700;">📄 Documento</span>`;
+          
+        const docName = item.name || (isFolder ? 'Carpeta Google Drive' : 'Documento Evidencia');
+        const textToSearch = `${docName} ${e.rut || ''} ${e.nombre || ''} ${e.curso || ''} ${e.id || ''} ${e.cargo || ''}`.toLowerCase();
         
-      const docName = item.name || (isFolder ? 'Carpeta Google Drive' : 'Documento Evidencia');
-      const textToSearch = `${docName} ${e.rut} ${e.nombre} ${e.curso} ${e.id} ${e.cargo}`.toLowerCase();
-      
+        if (q && !textToSearch.includes(q)) return;
+        
+        count++;
+        rowsHtml += `
+          <tr>
+            <td>${tipoBadge}</td>
+            <td>
+              <strong style="font-size:13.5px; color:var(--text-primary); display:block;">${esc(docName)}</strong>
+              <a href="${esc(item.url)}" target="_blank" style="font-size:11.5px; color:var(--primary, #4f46e5); text-decoration:none;">🔗 ${esc(item.url)}</a>
+            </td>
+            <td><span style="font-weight:700;">${esc(e.id || '')}</span><br><span style="font-size:12px; color:var(--text-secondary);">${esc(e.fecha || '')}</span></td>
+            <td><strong>${esc(e.nombre || 'Sin nombre')}</strong><br><span style="font-family:monospace; font-size:11.5px; color:var(--text-secondary);">${esc(e.rut || '')}</span></td>
+            <td>${esc(e.cargo || '')} ${e.curso ? '— ' + esc(e.curso) : ''}</td>
+            <td>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <a href="${esc(item.url)}" target="_blank" class="btn btn-primary btn-sm" style="text-decoration:none; font-size:12px; padding: 4px 10px;">🔗 Abrir Enlace</a>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="cargarReporteDesdeHash('${esc(e.id)}')" style="font-size:12px; padding: 4px 10px;">📝 Ver Ficha</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+    } else {
+      // Entrevista sin evidencias todavía (modo 'todas')
+      const textToSearch = `${e.rut || ''} ${e.nombre || ''} ${e.curso || ''} ${e.id || ''} ${e.cargo || ''}`.toLowerCase();
       if (q && !textToSearch.includes(q)) return;
       
       count++;
       rowsHtml += `
-        <tr>
-          <td>${tipoBadge}</td>
+        <tr style="opacity: 0.85;">
+          <td><span class="badge" style="background: #fef3c7; color: #92400e; font-weight: 700;">⚠️ Sin Adjunto</span></td>
           <td>
-            <strong style="font-size:13.5px; color:var(--text-primary); display:block;">${esc(docName)}</strong>
-            <a href="${esc(item.url)}" target="_blank" style="font-size:11.5px; color:var(--primary, #4f46e5); text-decoration:none;">🔗 ${esc(item.url)}</a>
+            <span style="font-size:13px; color:var(--text-secondary); font-style:italic;">No hay archivo ni carpeta Drive vinculada</span>
           </td>
-          <td><span style="font-weight:700;">${esc(e.id)}</span><br><span style="font-size:12px; color:var(--text-secondary);">${esc(e.fecha || '')}</span></td>
-          <td><strong>${esc(e.nombre)}</strong><br><span style="font-family:monospace; font-size:11.5px; color:var(--text-secondary);">${esc(e.rut)}</span></td>
-          <td>${esc(e.cargo)} — ${esc(e.curso)}</td>
+          <td><span style="font-weight:700;">${esc(e.id || '')}</span><br><span style="font-size:12px; color:var(--text-secondary);">${esc(e.fecha || '')}</span></td>
+          <td><strong>${esc(e.nombre || 'Sin nombre')}</strong><br><span style="font-family:monospace; font-size:11.5px; color:var(--text-secondary);">${esc(e.rut || '')}</span></td>
+          <td>${esc(e.cargo || '')} ${e.curso ? '— ' + esc(e.curso) : ''}</td>
           <td>
-            <div style="display: flex; gap: 6px;">
-              <a href="${esc(item.url)}" target="_blank" class="btn btn-primary btn-sm" style="text-decoration:none; font-size:12px;">🔗 Abrir Enlace</a>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="cargarReporteDesdeHash('${esc(e.id)}')" style="font-size:12px;">📝 Ver Ficha</button>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button type="button" class="btn btn-primary btn-sm" onclick="cargarEntrevistaParaEditarDirecto('${esc(e.id)}')" style="font-size:12px; padding: 4px 10px;">➕ Vincular Drive</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="cargarReporteDesdeHash('${esc(e.id)}')" style="font-size:12px; padding: 4px 10px;">📝 Ver Ficha</button>
             </div>
           </td>
         </tr>
       `;
-    });
+    }
   });
   
   if (count === 0) {
     tbody.innerHTML = `
       <tr>
         <td colspan="6" style="text-align: center; padding: 32px; color: var(--text-secondary);">
-          ${q ? 'No se encontraron documentos que coincidan con la búsqueda.' : 'No hay documentos ni carpetas Drive adjuntas registradas en las entrevistas aún.'}
+          ${q ? 'No se encontraron documentos ni entrevistas que coincidan con la búsqueda.' : 'No hay documentos ni carpetas Drive adjuntas en esta categoría.'}
         </td>
       </tr>
     `;
