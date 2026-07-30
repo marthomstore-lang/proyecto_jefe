@@ -1399,11 +1399,12 @@ async function guardarEntrevista() {
   const adjunto = document.getElementById('e-adjunto').value.trim();
   let obsVal = document.getElementById('e-obs').value;
   
-  obsVal = obsVal.replace(/\n\n\[CONFIDENCIAL:[^\]]+\]$/, '');
-  obsVal = obsVal.replace(/\n\n\[ADJUNTO:[^\]]+\]$/, '');
+  obsVal = obsVal.replace(/\n\n\[CONFIDENCIAL:[^\]\n]+\]/g, '').replace(/\[CONFIDENCIAL:[^\]\n]+\]/g, '');
+  obsVal = obsVal.replace(/\n\n\[ADJUNTO:[\s\S]+?\]/g, '').replace(/\[ADJUNTO:[\s\S]+?\]/g, '');
   
   if (adjunto) {
-    obsVal += `\n\n[ADJUNTO:${adjunto}]`;
+    const encoded = encodeURIComponent(adjunto);
+    obsVal += `\n\n[ADJUNTO:${encoded}]`;
   }
   
   if (privacidad === 'Confidencial') {
@@ -1553,14 +1554,23 @@ function parseObsMetadata(obsText) {
   const confMatch = cleanObs.match(/\[CONFIDENCIAL:([^\]]+)\]/);
   if (confMatch) {
     creador = confMatch[1];
-    cleanObs = cleanObs.replace(/\n\n\[CONFIDENCIAL:[^\]]+\]/, '').replace(/\[CONFIDENCIAL:[^\]]+\]/, '');
+    cleanObs = cleanObs.replace(/\n\n\[CONFIDENCIAL:[^\]]+\]/g, '').replace(/\[CONFIDENCIAL:[^\]]+\]/g, '');
   }
   
-  // Buscar y extraer [ADJUNTO:url]
-  const adjMatch = cleanObs.match(/\[ADJUNTO:([^\]]+)\]/);
+  // Buscar y extraer [ADJUNTO:data] (admite JSON codificado o URLs directas)
+  const adjMatch = cleanObs.match(/\[ADJUNTO:([\s\S]+?)\](?=\s*$|\s*\[CONFIDENCIAL:)/) || cleanObs.match(/\[ADJUNTO:([^\]]+)\]/);
   if (adjMatch) {
-    adjunto = adjMatch[1];
-    cleanObs = cleanObs.replace(/\n\n\[ADJUNTO:[^\]]+\]/, '').replace(/\[ADJUNTO:[^\]]+\]/, '');
+    let raw = adjMatch[1];
+    try {
+      if (raw.includes('%')) {
+        adjunto = decodeURIComponent(raw);
+      } else {
+        adjunto = raw;
+      }
+    } catch(e) {
+      adjunto = raw;
+    }
+    cleanObs = cleanObs.replace(/\n\n\[ADJUNTO:[\s\S]+?\]/g, '').replace(/\[ADJUNTO:[\s\S]+?\]/g, '');
   }
   
   return { obs: cleanObs.trim(), creador, adjunto };
@@ -3823,35 +3833,74 @@ function cerrarModalLogo() {
 }
 
 // ── MANEJO DE ADJUNTOS / DOCUMENTOS Y DRIVE ──
+function formatAdjuntoItem(item) {
+  if (!item) return null;
+  let url = typeof item === 'string' ? item : item.url;
+  if (!url || typeof url !== 'string') return null;
+  
+  url = url.trim();
+  if (!url) return null;
+  
+  let type = (item && item.type) || 'link';
+  let name = (item && item.name) || '';
+  
+  const isFolder = type === 'folder' || url.includes('drive.google.com/drive/folders');
+  const isDriveFile = url.includes('drive.google.com');
+  const isLocalUpload = url.startsWith('/uploads/');
+  
+  if (!name || name.startsWith('{') || name.startsWith('[')) {
+    if (isFolder) name = '📁 Carpeta de Evidencias Google Drive';
+    else if (isDriveFile) name = '📄 Archivo Google Drive';
+    else if (isLocalUpload) name = '📄 Archivo ' + url.split('/').pop().replace(/^\d+_/, '');
+    else name = '🔗 Enlace / Documento';
+  }
+  
+  if (isFolder) type = 'folder';
+  else type = 'file';
+  
+  return {
+    name: name,
+    url: url,
+    type: type,
+    date: (item && item.date) || new Date().toISOString().split('T')[0]
+  };
+}
+
 function parseAdjuntos(adjuntoVal) {
   if (!adjuntoVal) return [];
-  if (typeof adjuntoVal === 'object' && Array.isArray(adjuntoVal)) return adjuntoVal;
+  if (typeof adjuntoVal === 'object') {
+    if (Array.isArray(adjuntoVal)) return adjuntoVal.map(formatAdjuntoItem).filter(Boolean);
+    return [formatAdjuntoItem(adjuntoVal)].filter(Boolean);
+  }
   
   adjuntoVal = String(adjuntoVal).trim();
   if (!adjuntoVal) return [];
   
-  if (adjuntoVal.startsWith('[') && adjuntoVal.endsWith(']')) {
+  if (adjuntoVal.includes('%')) {
     try {
-      return JSON.parse(adjuntoVal);
+      adjuntoVal = decodeURIComponent(adjuntoVal);
+    } catch(e) {}
+  }
+  
+  // Intento 1: Parsear JSON si empieza y termina con llaves/corchetes
+  if ((adjuntoVal.startsWith('[') && adjuntoVal.endsWith(']')) || (adjuntoVal.startsWith('{') && adjuntoVal.endsWith('}'))) {
+    try {
+      const parsed = JSON.parse(adjuntoVal);
+      if (Array.isArray(parsed)) {
+        return parsed.map(formatAdjuntoItem).filter(Boolean);
+      } else if (parsed && typeof parsed === 'object') {
+        return [formatAdjuntoItem(parsed)].filter(Boolean);
+      }
     } catch (err) {}
   }
   
-  const urls = adjuntoVal.split(',').map(u => u.trim()).filter(Boolean);
-  return urls.map(url => {
-    let type = 'link';
-    let name = 'Documento / Evidencia Drive';
-    if (url.includes('drive.google.com/drive/folders')) {
-      type = 'folder';
-      name = '📁 Carpeta de Evidencias Google Drive';
-    } else if (url.includes('drive.google.com')) {
-      type = 'file';
-      name = '📄 Archivo Google Drive';
-    } else if (url.startsWith('/uploads/')) {
-      type = 'file';
-      name = '📁 Archivo ' + url.split('/').pop().replace(/^\d+_/, '');
-    }
-    return { name, url, type, date: new Date().toISOString().split('T')[0] };
-  });
+  // Intento 2: Extracción con Regex para recuperar URLs incluso de strings corruptos o cortados
+  const urlMatches = adjuntoVal.match(/(https?:\/\/[^\s,\]"'}]+|\/uploads\/[^\s,\]"'}]+)/g);
+  if (urlMatches && urlMatches.length > 0) {
+    return urlMatches.map(url => formatAdjuntoItem({ url }));
+  }
+  
+  return [];
 }
 
 function renderAdjuntosForm() {
@@ -3866,7 +3915,9 @@ function renderAdjuntosForm() {
     return;
   }
   
-  container.innerHTML = currentAdjuntosList.map((item, idx) => {
+  container.innerHTML = currentAdjuntosList.map((rawItem, idx) => {
+    const item = formatAdjuntoItem(rawItem);
+    if (!item) return '';
     const isFolder = item.type === 'folder' || (item.url && item.url.includes('drive.google.com/drive/folders'));
     const icon = isFolder ? '📁' : '📄';
     const itemTitle = esc(item.name || (isFolder ? 'Carpeta Google Drive' : 'Documento Evidencia'));
