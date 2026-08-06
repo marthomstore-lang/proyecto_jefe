@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Multivista en Vivo — Liceo LTP Campanario</title>
   <style>
     :root {
@@ -18,6 +18,15 @@
       --danger: #ef4444;
     }
 
+    /* Protección de Seguridad: Deshabilitar Selección y Copia */
+    * {
+      -webkit-user-select: none !important;
+      -moz-user-select: none !important;
+      -ms-user-select: none !important;
+      user-select: none !important;
+      -webkit-touch-callout: none !important;
+    }
+
     body {
       font-family: system-ui, -apple-system, sans-serif;
       background-color: var(--bg-dark);
@@ -27,6 +36,22 @@
       line-height: 1.5;
       min-height: 100vh;
       box-sizing: border-box;
+      transition: filter 0.15s ease, opacity 0.15s ease;
+    }
+
+    /* Ocultar contenido completamente si se intenta imprimir */
+    @media print {
+      html, body {
+        display: none !important;
+        visibility: hidden !important;
+      }
+    }
+
+    /* Difuminado de Seguridad cuando se pierde el foco (captura de pantalla / cambiar de app) */
+    .security-blur {
+      filter: blur(35px) grayscale(100%) !important;
+      opacity: 0.05 !important;
+      pointer-events: none !important;
     }
 
     .container {
@@ -297,7 +322,7 @@
     </div>
     
     <div class="redirect-box">
-      Redirigiendo automáticamente a Google en <strong id="countdown">5</strong> segundos...
+      Redirigiendo automáticamente a Google en <strong id="countdown">3</strong> segundos...
     </div>
 
     <div class="btn-row">
@@ -307,6 +332,52 @@
   </div>
 
   <script>
+    // 🔒 1. PROTECCIÓN CONTRA VOLVER ATRÁS (BLOQUEO DE HISTORIAL NAVEGADOR)
+    history.pushState(null, null, location.href);
+    window.onpopstate = function () {
+      history.pushState(null, null, location.href);
+    };
+
+    // 🔒 2. PROTECCIÓN DE SEGURIDAD (ANTI-CAPTURAS Y BLOQUEO TECLAS)
+    document.addEventListener('contextmenu', e => e.preventDefault());
+
+    document.addEventListener('keydown', function(e) {
+      if (
+        e.key === 'PrintScreen' || 
+        e.keyCode === 44 ||
+        (e.ctrlKey && (e.key === 'p' || e.key === 'P' || e.key === 's' || e.key === 'S' || e.key === 'u' || e.key === 'U')) ||
+        (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'C' || e.key === 'J')) ||
+        (e.metaKey && e.shiftKey && (e.key === '3' || e.key === '4' || e.key === '5'))
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        aplicarBlurSeguridad();
+      }
+    });
+
+    // Ocultar/Blur cuando la app pierde el foco o se intenta tomar captura / cambiar de pestaña
+    document.addEventListener('visibilitychange', function() {
+      if (document.hidden) {
+        document.body.classList.add('security-blur');
+      } else {
+        document.body.classList.remove('security-blur');
+      }
+    });
+
+    window.addEventListener('blur', function() {
+      document.body.classList.add('security-blur');
+    });
+
+    window.addEventListener('focus', function() {
+      document.body.classList.remove('security-blur');
+    });
+
+    function aplicarBlurSeguridad() {
+      document.body.classList.add('security-blur');
+      setTimeout(() => document.body.classList.remove('security-blur'), 2000);
+    }
+
+    // ── LÓGICA DE MULTIVISTA Y CONEXIÓN ──
     const urlParams = new URLSearchParams(window.location.search);
     const session = urlParams.get('session');
     const statusText = document.getElementById('status-text');
@@ -318,7 +389,7 @@
     let isClosedState = false;
     let pollInterval = null;
     let redirectTimer = null;
-    let countdownSecs = 5;
+    let countdownSecs = 3;
 
     if (!session) {
       handleSessionClosed();
@@ -436,7 +507,7 @@
       liveContainer.style.display = "none";
       closedScreen.style.display = "block";
 
-      countdownSecs = 5;
+      countdownSecs = 3;
       if (countdownEl) countdownEl.textContent = countdownSecs;
 
       redirectTimer = setInterval(() => {
@@ -450,7 +521,7 @@
     }
 
     function irAGoogle() {
-      window.location.href = "https://www.google.com";
+      window.location.replace("https://www.google.com");
     }
 
     function dejarEnBlanco() {
