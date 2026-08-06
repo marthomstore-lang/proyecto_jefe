@@ -252,6 +252,35 @@
       border: 1px solid #334155;
     }
 
+    /* Marca de Agua de Seguridad sobre el Contenido */
+    .watermark-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 9999;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: space-around;
+      justify-content: space-around;
+      overflow: hidden;
+      opacity: 0.08;
+      user-select: none;
+    }
+
+    .watermark-item {
+      font-size: 13px;
+      font-weight: 800;
+      color: #ffffff;
+      transform: rotate(-25deg);
+      white-space: nowrap;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 30px;
+    }
+
     .btn-secondary:hover {
       background-color: #334155;
       color: #fff;
@@ -259,6 +288,16 @@
   </style>
 </head>
 <body>
+  <!-- Marca de Agua de Seguridad para Móviles y Computadores -->
+  <div class="watermark-overlay">
+    <div class="watermark-item">CONFIDENCIAL — LTP CAMPANARIO</div>
+    <div class="watermark-item">CONFIDENCIAL — LTP CAMPANARIO</div>
+    <div class="watermark-item">CONFIDENCIAL — LTP CAMPANARIO</div>
+    <div class="watermark-item">CONFIDENCIAL — LTP CAMPANARIO</div>
+    <div class="watermark-item">CONFIDENCIAL — LTP CAMPANARIO</div>
+    <div class="watermark-item">CONFIDENCIAL — LTP CAMPANARIO</div>
+  </div>
+
   <div class="container" id="live-container">
     <header>
       <h1>🏛️ Liceo Técnico Profesional Campanario</h1>
@@ -354,6 +393,19 @@
         aplicarBlurSeguridad();
       }
     });
+
+    // Detección de gestos multitáctiles en celulares (ej: deslizar 3 dedos o toque doble de nudillos)
+    document.addEventListener('touchstart', function(e) {
+      if (e.touches && e.touches.length >= 2) {
+        aplicarBlurSeguridad();
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function(e) {
+      if (e.touches && e.touches.length >= 2) {
+        aplicarBlurSeguridad();
+      }
+    }, { passive: true });
 
     // Ocultar/Blur cuando la app pierde el foco o se intenta tomar captura / cambiar de pestaña
     document.addEventListener('visibilitychange', function() {
