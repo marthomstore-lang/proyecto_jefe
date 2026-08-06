@@ -10,10 +10,12 @@
       --card-bg: #0f172a;
       --border-color: #1e293b;
       --primary: #4f46e5;
+      --primary-hover: #4338ca;
       --primary-glow: rgba(79, 70, 229, 0.15);
       --text-main: #f3f4f6;
       --text-muted: #9ca3af;
       --success: #10b981;
+      --danger: #ef4444;
     }
 
     body {
@@ -23,6 +25,8 @@
       margin: 0;
       padding: 16px;
       line-height: 1.5;
+      min-height: 100vh;
+      box-sizing: border-box;
     }
 
     .container {
@@ -53,7 +57,7 @@
       gap: 6px;
       background-color: rgba(16, 185, 129, 0.1);
       color: var(--success);
-      padding: 6px 12px;
+      padding: 6px 14px;
       border-radius: 9999px;
       font-size: 12px;
       font-weight: 600;
@@ -137,7 +141,7 @@
     }
 
     .content-box:empty::before {
-      content: "(Esperando escritura...)";
+      content: "(Sin contenido aún)";
       color: var(--text-muted);
       font-style: italic;
     }
@@ -146,14 +150,95 @@
       border-color: var(--primary);
       box-shadow: 0 0 10px var(--primary-glow);
     }
+
+    /* Pantalla para Entrevista Cerrada / Inactiva */
+    .closed-screen {
+      display: none;
+      max-width: 500px;
+      margin: 40px auto 0 auto;
+      text-align: center;
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 36px 24px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    .closed-icon {
+      font-size: 56px;
+      margin-bottom: 16px;
+      line-height: 1;
+    }
+
+    .closed-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 12px;
+    }
+
+    .closed-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .redirect-box {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      color: #fca5a5;
+    }
+
+    .btn-row {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .btn-primary {
+      background-color: var(--primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .btn-secondary {
+      background-color: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+    }
+
+    .btn-secondary:hover {
+      background-color: #334155;
+      color: #fff;
+    }
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="container" id="live-container">
     <header>
       <h1>🏛️ Liceo Técnico Profesional Campanario</h1>
-      <div class="badge-live">
-        <span class="dot"></span>
+      <div class="badge-live" id="live-badge">
+        <span class="dot" id="live-dot"></span>
         <span id="status-text">Visualizando en vivo</span>
       </div>
     </header>
@@ -203,23 +288,42 @@
     </div>
   </div>
 
+  <!-- PANTALLA DE SESIÓN CERRADA / FINALIZADA -->
+  <div class="closed-screen" id="closed-screen">
+    <div class="closed-icon">🔒</div>
+    <div class="closed-title">La entrevista ha finalizado</div>
+    <div class="closed-desc">
+      Esta sesión de visualización en vivo ha sido cerrada y ya no está disponible por razones de seguridad y confidencialidad.
+    </div>
+    
+    <div class="redirect-box">
+      Redirigiendo automáticamente a Google en <strong id="countdown">5</strong> segundos...
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="irAGoogle()">🌐 Salir ahora a Google</button>
+      <button class="btn btn-secondary" onclick="dejarEnBlanco()">⬜ Dejar pantalla en blanco</button>
+    </div>
+  </div>
+
   <script>
     const urlParams = new URLSearchParams(window.location.search);
     const session = urlParams.get('session');
     const statusText = document.getElementById('status-text');
-    const liveBadge = document.querySelector('.badge-live');
+    const liveBadge = document.getElementById('live-badge');
+    const liveContainer = document.getElementById('live-container');
+    const closedScreen = document.getElementById('closed-screen');
+    const countdownEl = document.getElementById('countdown');
+
+    let isClosedState = false;
+    let pollInterval = null;
+    let redirectTimer = null;
+    let countdownSecs = 5;
 
     if (!session) {
-      statusText.textContent = "Sin sesión activa";
-      liveBadge.style.backgroundColor = "rgba(239, 68, 68, 0.1)";
-      liveBadge.style.color = "#ef4444";
-      liveBadge.style.borderColor = "rgba(239, 68, 68, 0.2)";
-      document.querySelector('.dot').style.backgroundColor = "#ef4444";
-      document.querySelector('.dot').style.boxShadow = "none";
-      document.querySelector('.dot').style.animation = "none";
+      handleSessionClosed();
     } else {
-      // Iniciar polling de datos cada 1 segundo
-      setInterval(fetchLiveState, 1000);
+      pollInterval = setInterval(fetchLiveState, 1200);
       fetchLiveState();
     }
 
@@ -227,6 +331,8 @@
     let useSupabaseFallback = false;
 
     async function fetchLiveState() {
+      if (isClosedState) return;
+
       try {
         if (useSupabaseFallback) {
           await fetchFromSupabase();
@@ -240,19 +346,20 @@
         
         const contentType = res.headers.get('Content-Type') || '';
         if (!contentType.includes('application/json')) {
-          throw new Error("Server did not return JSON (probably HTML SPA fallback)");
+          throw new Error("Server did not return JSON");
         }
         
         const data = await res.json();
         handleData(data);
       } catch (err) {
-        console.warn("Local server multivista failed, falling back to Supabase:", err);
         useSupabaseFallback = true;
         await fetchFromSupabase();
       }
     }
 
     async function fetchFromSupabase() {
+      if (isClosedState) return;
+
       const SUPABASE_URL = "https://squfklurqnnoujcmvxjh.supabase.co";
       const SUPABASE_ANON_KEY = "sb_publishable_i7ruBqqrqr4ro8YywVk0sQ_VhvY_R-m";
       
@@ -268,6 +375,10 @@
         const data = await res.json();
         if (data && data.length > 0) {
           const row = data[0];
+          if (row.estado === 'CLOSED' || row.estado === 'FINALIZADO') {
+            handleSessionClosed();
+            return;
+          }
           const payload = {
             sessionId: row.id,
             rut: row.rut,
@@ -289,20 +400,21 @@
           };
           handleData(payload);
         } else {
-          handleData({});
+          handleSessionClosed();
         }
       } catch (err) {
         console.error("Error fetching from Supabase:", err);
-        statusText.textContent = "Error de conexión";
       }
     }
 
     function handleData(data) {
-      if (data && data.sessionId) {
+      if (isClosedState) return;
+
+      if (data && data.sessionId && data.estado !== 'CLOSED') {
         updateField('v-nombre', data.nombre);
         updateField('v-rut', data.rut);
-        updateField('v-curso', `${data.cargo || ''} - ${data.curso || ''}`);
-        updateField('v-cita', `${data.fecha || ''} ${data.hora || ''} (con ${data.resp || 'responsable'})`);
+        updateField('v-curso', `${data.cargo || ''} ${data.curso ? '- ' + data.curso : ''}`);
+        updateField('v-cita', `${data.fecha || ''} ${data.hora || ''} ${data.resp ? '(con ' + data.resp + ')' : ''}`);
         
         updateContentBox('v-objetivo', data.objetivo);
         updateContentBox('v-motivo', data.motivo);
@@ -311,8 +423,40 @@
         
         statusText.textContent = "Visualizando en vivo";
       } else {
-        statusText.textContent = "Esperando sesión...";
+        handleSessionClosed();
       }
+    }
+
+    function handleSessionClosed() {
+      if (isClosedState) return;
+      isClosedState = true;
+      
+      if (pollInterval) clearInterval(pollInterval);
+
+      liveContainer.style.display = "none";
+      closedScreen.style.display = "block";
+
+      countdownSecs = 5;
+      if (countdownEl) countdownEl.textContent = countdownSecs;
+
+      redirectTimer = setInterval(() => {
+        countdownSecs--;
+        if (countdownEl) countdownEl.textContent = countdownSecs;
+        if (countdownSecs <= 0) {
+          clearInterval(redirectTimer);
+          irAGoogle();
+        }
+      }, 1000);
+    }
+
+    function irAGoogle() {
+      window.location.href = "https://www.google.com";
+    }
+
+    function dejarEnBlanco() {
+      if (redirectTimer) clearInterval(redirectTimer);
+      document.body.innerHTML = "";
+      document.body.style.backgroundColor = "#030712";
     }
 
     function updateField(id, val) {
@@ -330,7 +474,6 @@
           el.textContent = cleanVal;
           prevValues[id] = cleanVal;
           
-          // Efecto visual de actualización
           el.classList.add('updated');
           setTimeout(() => el.classList.remove('updated'), 600);
         }
@@ -339,3 +482,4 @@
   </script>
 </body>
 </html>
+

@@ -2510,6 +2510,22 @@ function copiarMultivistaLink() {
   toast('📋 Enlace copiado al portapapeles');
 }
 
+async function detenerMultivistaManual() {
+  if (multiviewInterval) {
+    clearInterval(multiviewInterval);
+    multiviewInterval = null;
+  }
+  const prevId = multiviewSessionId;
+  multiviewSessionId = null;
+  
+  if (prevId) {
+    await terminarTransmisionMultivista(prevId);
+  }
+  
+  cerrarMultivistaModal();
+  toast('🔴 Transmisión finalizada y cerrada');
+}
+
 function iniciarTransmisionMultivista() {
   if (multiviewInterval) clearInterval(multiviewInterval);
   
@@ -2968,16 +2984,30 @@ async function terminarTransmisionMultivista(sessionId) {
     console.error("Error ending local multivista session:", err);
   }
   
-  // 2. Terminar en Supabase (si está configurado)
+  // 2. Terminar en Supabase (marcando como CLOSED primero para notificar inmediatamente a multiview.html)
   try {
     const headers = {
       'apikey': SUPABASE_ANON_KEY,
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json'
     };
+    
+    // Patch a CLOSED primero para que la segunda pantalla detecte el cierre al instante
     await originalFetch(`${SUPABASE_URL}/rest/v1/entrevistas?id=eq.${encodeURIComponent(sessionId)}`, {
-      method: 'DELETE',
-      headers: { ...headers }
+      method: 'PATCH',
+      headers: { ...headers },
+      body: JSON.stringify({ estado: 'CLOSED' })
     });
+
+    // Eliminar la sesión temporal en Supabase poco después
+    setTimeout(async () => {
+      try {
+        await originalFetch(`${SUPABASE_URL}/rest/v1/entrevistas?id=eq.${encodeURIComponent(sessionId)}`, {
+          method: 'DELETE',
+          headers: { ...headers }
+        });
+      } catch(e) {}
+    }, 2000);
   } catch(err) {
     console.error("Error deleting Supabase multivista session:", err);
   }
