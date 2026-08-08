@@ -809,6 +809,29 @@ textarea {
   }
 }
 
+.firma-caminata-row {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-around !important;
+  align-items: flex-end !important;
+  gap: 16px !important;
+  margin-top: 40px !important;
+  width: 100% !important;
+  text-align: center !important;
+  page-break-inside: avoid !important;
+}
+
+@media print {
+  .firma-caminata-row {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-around !important;
+    align-items: flex-end !important;
+    gap: 16px !important;
+    margin-top: 30px !important;
+  }
+}
+
 /* ── TABS ── */
 .tabs {
   display: flex;

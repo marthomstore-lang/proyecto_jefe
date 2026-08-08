@@ -16,7 +16,7 @@ La aplicación permite:
 6. **Administración y Protocolos**: Archivo documental de oficios, resoluciones, circulares y reglamentos institucionales.
 7. **Multivista en Vivo (Dual Screen)**: Transmisión en tiempo real vía código QR hacia una segunda pantalla o dispositivo móvil para que el entrevistado observe lo que se redacta.
 8. **Integración con Google Drive**: Carga directa y vinculación de archivos/carpetas de evidencias mediante Google Apps Script y enlaces compartidos.
-9. **Ficha Oficial de Impresión**: Formato estandarizado con normas de impresión oficial (`@media print`) para tamaño Carta/A4 con membrete institucional y recuadros de firmas.
+10. **Caminatas Pedagógicas (Proyecto ADECO)**: Observación breve de aula (10 a 15 min) articulada con los Sellos del PEI, evaluación cualitativa en 4 dimensiones (Convivencia, Curriculum, Inclusión/PIE, Evaluación), equipo de hasta 3 observadores simultáneos, compromisos y firmas múltiples horizontales.
 
 ---
 

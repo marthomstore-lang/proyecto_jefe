@@ -2578,6 +2578,11 @@ function tieneAccesoSilencioso(e) {
 }
 
 function generarHtmlReporte(e, tieneAcceso, participantes = []) {
+  const isCaminata = (e.cargo && e.cargo.includes('Caminata')) || (e.obs && e.obs.includes('[CAMINATA:')) || (e.objetivo && e.objetivo.includes('Caminata Pedagógica'));
+  if (isCaminata) {
+    return generarHtmlReporteCaminata(e, tieneAcceso);
+  }
+
   const meta = parseObsMetadata(e.obs);
   const id = esc(e.id || '');
   const fecha = esc(e.fecha || '') + ' ' + esc(e.hora || '');
@@ -4269,5 +4274,571 @@ function filtrarEvidencias() {
 
 // Inicializar logo al cargar
 cargarLogoInstitucional();
+
+// ═════════════════════════════════════════════════════════════════════
+// 🚶‍♂️ MÓDULO CAMINATA PEDAGÓGICA (PROYECTO ADECO & SELLOS PEI)
+// ═════════════════════════════════════════════════════════════════════
+let editandoCaminataId = null;
+
+async function cargarObservadoresSelect() {
+  const sel1 = document.getElementById('cp-obs1');
+  const sel2 = document.getElementById('cp-obs2');
+  const sel3 = document.getElementById('cp-obs3');
+  if (!sel1 || !sel2 || !sel3) return;
+
+  try {
+    const [resDoc, resAsi] = await Promise.all([
+      fetch('/api/docentes?_=' + Date.now()).then(r => r.json()).catch(() => []),
+      fetch('/api/asistentes?_=' + Date.now()).then(r => r.json()).catch(() => [])
+    ]);
+
+    const personal = [];
+    (resDoc || []).forEach(d => {
+      const nom = [d.Nombres, d['Apellido Paterno'], d['Apellido Materno']].filter(Boolean).join(' ').trim();
+      if (nom) personal.push({ nombre: nom, cargo: d.Cargo || d['Función/curso'] || 'Docente' });
+    });
+    (resAsi || []).forEach(a => {
+      const nom = [a.Nombres, a['Apellido Paterno'], a['Apellido Materno']].filter(Boolean).join(' ').trim();
+      if (nom) personal.push({ nombre: nom, cargo: a.Cargo || a.Función || 'Asistente de la Educación' });
+    });
+
+    personal.sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+    let optionsHtml1 = '<option value="">-- Seleccionar Observador Principal --</option>';
+    let optionsHtml2 = '<option value="">-- Sin segundo observador --</option>';
+    let optionsHtml3 = '<option value="">-- Sin tercer observador --</option>';
+
+    personal.forEach(p => {
+      const label = `${p.nombre} (${p.cargo})`;
+      optionsHtml1 += `<option value="${esc(p.nombre)}">${esc(label)}</option>`;
+      optionsHtml2 += `<option value="${esc(p.nombre)}">${esc(label)}</option>`;
+      optionsHtml3 += `<option value="${esc(p.nombre)}">${esc(label)}</option>`;
+    });
+
+    sel1.innerHTML = optionsHtml1;
+    sel2.innerHTML = optionsHtml2;
+    sel3.innerHTML = optionsHtml3;
+
+    const curUser = sessionStorage.getItem('campanario_user');
+    if (curUser) {
+      const match = personal.find(p => p.nombre.toLowerCase().includes(curUser.toLowerCase()));
+      if (match) sel1.value = match.nombre;
+    }
+  } catch (e) {
+    console.error("Error al cargar observadores:", e);
+  }
+}
+
+function abrirLookupCaminata() {
+  abrirLookup(function(persona) {
+    if (persona) {
+      document.getElementById('cp-rut').value = persona.RUT || persona.Rut || '';
+      document.getElementById('cp-docente').value = [persona.Nombres, persona['Apellido Paterno'], persona['Apellido Materno']].filter(Boolean).join(' ').trim();
+      document.getElementById('cp-asig').value = persona.Asignatura || persona['Profesor de Asignatura'] || persona.Cargo || 'Docente de Aula';
+      document.getElementById('cp-curso').value = persona.Curso || persona['Función/curso'] || 'Varios Cursos';
+    }
+  });
+}
+
+async function autocompletarCaminata() {
+  const rutInput = document.getElementById('cp-rut');
+  if (!rutInput) return;
+  const rut = rutInput.value.trim();
+  if (!rut) return;
+
+  try {
+    const res = await fetch(`/api/persona?rut=${encodeURIComponent(rut)}`);
+    if (res.ok) {
+      const p = await res.json();
+      if (p) {
+        document.getElementById('cp-docente').value = [p.Nombres, p['Apellido Paterno'], p['Apellido Materno']].filter(Boolean).join(' ').trim();
+        document.getElementById('cp-asig').value = p.Asignatura || p['Profesor de Asignatura'] || p.Cargo || 'Docente de Aula';
+        document.getElementById('cp-curso').value = p.Curso || p['Función/curso'] || 'Varios Cursos';
+      }
+    }
+  } catch(e) {
+    console.error("Error al autocompletar caminata:", e);
+  }
+}
+
+function agregarFilaCompromisoCaminata(compData = {}) {
+  const tbody = document.getElementById('cp-compromisos-body');
+  if (!tbody) return;
+
+  const tr = document.createElement('tr');
+  tr.style.borderBottom = '1px solid var(--border)';
+  tr.innerHTML = `
+    <td style="padding:6px;"><input class="cp-comp-desc" value="${esc(compData.comp || '')}" placeholder="Ej: Diversificar guías de trabajo..." style="width:100%; font-size:12px;"></td>
+    <td style="padding:6px;"><input class="cp-comp-resp" value="${esc(compData.resp || '')}" placeholder="Ej: Docente y UTP" style="width:100%; font-size:12px;"></td>
+    <td style="padding:6px;"><input type="date" class="cp-comp-plazo" value="${esc(compData.plazo || '')}" style="width:100%; font-size:12px;"></td>
+    <td style="padding:6px;"><input class="cp-comp-evid" value="${esc(compData.evidencia || '')}" placeholder="Ej: Planificación de aula" style="width:100%; font-size:12px;"></td>
+    <td style="padding:6px; text-align:center;"><button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('tr').remove()" style="padding:4px 8px; color:var(--danger)">🗑️</button></td>
+  `;
+  tbody.appendChild(tr);
+}
+
+function limpiarFormCaminata() {
+  editandoCaminataId = null;
+  const fields = ['cp-rut', 'cp-docente', 'cp-asig', 'cp-curso', 'cp-lugar', 'cp-fortalezas', 'cp-mejoras'];
+  fields.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+
+  const now = new Date();
+  const fechaEl = document.getElementById('cp-fecha');
+  const horaEl = document.getElementById('cp-hora');
+  if (fechaEl) fechaEl.value = now.toISOString().split('T')[0];
+  if (horaEl) horaEl.value = now.toTimeString().split(' ')[0].substring(0, 5);
+
+  document.querySelectorAll('.cp-eval-val').forEach(sel => sel.value = 'Observable');
+  document.querySelectorAll('.cp-eval-obs').forEach(inp => inp.value = '');
+
+  const tbody = document.getElementById('cp-compromisos-body');
+  if (tbody) {
+    tbody.innerHTML = '';
+    agregarFilaCompromisoCaminata();
+  }
+
+  cargarObservadoresSelect();
+}
+
+async function guardarCaminataPedagogica() {
+  const rut = document.getElementById('cp-rut').value.trim();
+  const docente = document.getElementById('cp-docente').value.trim();
+  const asig = document.getElementById('cp-asig').value.trim();
+  const curso = document.getElementById('cp-curso').value.trim();
+  const fecha = document.getElementById('cp-fecha').value;
+  const hora = document.getElementById('cp-hora').value;
+  const tiempo = document.getElementById('cp-tiempo').value || '10 a 15 minutos';
+  const lugar = document.getElementById('cp-lugar').value.trim() || 'Sala de Clases';
+  const obs1 = document.getElementById('cp-obs1').value;
+  const obs2 = document.getElementById('cp-obs2').value;
+  const obs3 = document.getElementById('cp-obs3').value;
+  const sello = document.getElementById('cp-sello').value;
+  const proyecto = document.getElementById('cp-proyecto').value;
+
+  if (!rut || !docente) {
+    toast('⚠️ Ingrese el RUT y Nombre del docente visitado');
+    return;
+  }
+  if (!fecha || !hora) {
+    toast('⚠️ Ingrese la Fecha y Hora de la visita');
+    return;
+  }
+  if (!obs1) {
+    toast('⚠️ Seleccione al menos el Observador Principal 1');
+    return;
+  }
+
+  const evals = {};
+  document.querySelectorAll('.cp-eval-val').forEach(sel => {
+    const key = sel.getAttribute('data-ind');
+    const val = sel.value;
+    const obsInput = document.querySelector(`.cp-eval-obs[data-ind="${key}"]`);
+    const obsText = obsInput ? obsInput.value.trim() : '';
+    evals[key] = { val, obs: obsText };
+  });
+
+  const fortalezas = document.getElementById('cp-fortalezas').value.trim();
+  const mejoras = document.getElementById('cp-mejoras').value.trim();
+
+  const compromisos = [];
+  document.querySelectorAll('#cp-compromisos-body tr').forEach(tr => {
+    const compDesc = tr.querySelector('.cp-comp-desc');
+    const compResp = tr.querySelector('.cp-comp-resp');
+    const compPlazo = tr.querySelector('.cp-comp-plazo');
+    const compEvid = tr.querySelector('.cp-comp-evid');
+
+    if (compDesc && compResp) {
+      const comp = compDesc.value.trim();
+      const resp = compResp.value.trim();
+      const plazo = compPlazo ? compPlazo.value : '';
+      const evidencia = compEvid ? compEvid.value.trim() : '';
+      if (comp || resp) {
+        compromisos.push({ comp, resp, plazo, evidencia });
+      }
+    }
+  });
+
+  const dataCaminata = {
+    docente, rut, asig, curso, fecha, hora, tiempo, lugar, obs1, obs2, obs3, sello, proyecto,
+    evals, fortalezas, mejoras, compromisos
+  };
+
+  const payloadObs = `[CAMINATA:${encodeURIComponent(JSON.stringify(dataCaminata))}]`;
+
+  const payload = {
+    id: editandoCaminataId || null,
+    rut: rut,
+    nombre: docente,
+    cargo: "Docente — Caminata Pedagógica ADECO",
+    curso: curso,
+    jefe: obs1,
+    asig: asig,
+    pie: obs2 ? (obs3 ? `${obs2} / ${obs3}` : obs2) : 'No aplica',
+    fecha: fecha,
+    hora: hora,
+    resp: obs1,
+    estado: "REALIZADA",
+    seguimiento: compromisos.length > 0 && compromisos[0].plazo ? compromisos[0].plazo : fecha,
+    objetivo: `Visita de Aula ADECO — Caminata Pedagógica (${sello})`,
+    motivo: `Observación Breve (10-15 min) en ${lugar}. Sello PEI: ${sello}.`,
+    acuerdos: compromisos.map(c => `• ${c.comp} (Resp: ${c.resp}, Plazo: ${c.plazo || 'Sin fecha'})`).join('\n') || 'Sin compromisos específicos.',
+    obs: payloadObs
+  };
+
+  try {
+    const res = await fetch('/api/entrevistas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    if (result.success) {
+      toast('✅ Caminata Pedagógica guardada con éxito: ' + result.id);
+      loadAllData();
+      limpiarFormCaminata();
+      goTo('historial');
+    } else {
+      toast('❌ Error: ' + result.error);
+    }
+  } catch (err) {
+    console.error("Error al guardar caminata:", err);
+    toast('❌ Error de conexión al servidor');
+  }
+}
+
+function previsualizarCaminata() {
+  const rut = document.getElementById('cp-rut').value.trim();
+  const docente = document.getElementById('cp-docente').value.trim();
+  const asig = document.getElementById('cp-asig').value.trim();
+  const curso = document.getElementById('cp-curso').value.trim();
+  const fecha = document.getElementById('cp-fecha').value;
+  const hora = document.getElementById('cp-hora').value;
+  const tiempo = document.getElementById('cp-tiempo').value || '10 a 15 minutos';
+  const lugar = document.getElementById('cp-lugar').value.trim() || 'Sala de Clases';
+  const obs1 = document.getElementById('cp-obs1').value;
+  const obs2 = document.getElementById('cp-obs2').value;
+  const obs3 = document.getElementById('cp-obs3').value;
+  const sello = document.getElementById('cp-sello').value;
+  const proyecto = document.getElementById('cp-proyecto').value;
+
+  const evals = {};
+  document.querySelectorAll('.cp-eval-val').forEach(sel => {
+    const key = sel.getAttribute('data-ind');
+    const val = sel.value;
+    const obsInput = document.querySelector(`.cp-eval-obs[data-ind="${key}"]`);
+    const obsText = obsInput ? obsInput.value.trim() : '';
+    evals[key] = { val, obs: obsText };
+  });
+
+  const fortalezas = document.getElementById('cp-fortalezas').value.trim();
+  const mejoras = document.getElementById('cp-mejoras').value.trim();
+
+  const compromisos = [];
+  document.querySelectorAll('#cp-compromisos-body tr').forEach(tr => {
+    const compDesc = tr.querySelector('.cp-comp-desc');
+    const compResp = tr.querySelector('.cp-comp-resp');
+    const compPlazo = tr.querySelector('.cp-comp-plazo');
+    const compEvid = tr.querySelector('.cp-comp-evid');
+
+    if (compDesc && compResp) {
+      const comp = compDesc.value.trim();
+      const resp = compResp.value.trim();
+      const plazo = compPlazo ? compPlazo.value : '';
+      const evidencia = compEvid ? compEvid.value.trim() : '';
+      if (comp || resp) {
+        compromisos.push({ comp, resp, plazo, evidencia });
+      }
+    }
+  });
+
+  const dataCaminata = {
+    docente, rut, asig, curso, fecha, hora, tiempo, lugar, obs1, obs2, obs3, sello, proyecto,
+    evals, fortalezas, mejoras, compromisos
+  };
+
+  const entMock = {
+    id: editandoCaminataId || '(vista previa)',
+    rut: rut,
+    nombre: docente,
+    cargo: "Docente — Caminata Pedagógica ADECO",
+    curso: curso,
+    jefe: obs1,
+    asig: asig,
+    fecha: fecha,
+    hora: hora,
+    resp: obs1,
+    obs: `[CAMINATA:${encodeURIComponent(JSON.stringify(dataCaminata))}]`
+  };
+
+  document.getElementById('reporte').innerHTML = generarHtmlReporteCaminata(entMock, true);
+  goTo('reporte');
+}
+
+function generarHtmlReporteCaminata(e, esVistaPrevia = false) {
+  let data = {};
+  if (e.obs && e.obs.includes('[CAMINATA:')) {
+    const match = e.obs.match(/\[CAMINATA:([^\]]+)\]/);
+    if (match) {
+      try {
+        data = JSON.parse(decodeURIComponent(match[1]));
+      } catch (err) {
+        console.error("Error al decodificar caminata json:", err);
+      }
+    }
+  }
+
+  const docente = esc(data.docente || e.nombre || '');
+  const rut = esc(data.rut || e.rut || '');
+  const asig = esc(data.asig || e.asig || '');
+  const curso = esc(data.curso || e.curso || '');
+  const fecha = esc(data.fecha || e.fecha || '');
+  const hora = esc(data.hora || e.hora || '');
+  const tiempo = esc(data.tiempo || '10 a 15 minutos');
+  const lugar = esc(data.lugar || 'Sala de Clases');
+  const sello = esc(data.sello || 'Innovación Pedagógica e Inclusión');
+  const obs1 = esc(data.obs1 || e.resp || 'Observador Principal');
+  const obs2 = esc(data.obs2 || '');
+  const obs3 = esc(data.obs3 || '');
+
+  const evals = data.evals || {};
+  const fortalezas = esc(data.fortalezas || '');
+  const mejoras = esc(data.mejoras || '');
+  const compromisos = data.compromisos || [];
+
+  const indNames = {
+    c1: '1.1. Clima de respeto entre docente y estudiantes',
+    c2: '1.2. Estudiantes involucrados en la actividad',
+    c3: '1.3. Organización del aula favorece aprendizaje',
+    cu1: '2.1. Instrucciones claras y comprensibles',
+    cu2: '2.2. Estrategias metodológicas activas',
+    cu3: '2.3. Monitoreo constante del trabajo de estudiantes',
+    i1: '3.1. Promoción de participación de todos',
+    i2: '3.2. Estrategias diversificadas presentes',
+    i3: '3.3. Entrega de apoyos oportunos',
+    e1: '4.1. Verificación de comprensión durante clase',
+    e2: '4.2. Entrega de retroalimentación formativa',
+    e3: '4.3. Ajustes realizados según respuesta del grupo'
+  };
+
+  const getBadgeClass = (val) => {
+    if (val === 'Observable') return 'background:#dcfce7; color:#15803d; border:1px solid #bbf7d0;';
+    if (val === 'En proceso') return 'background:#fef9c3; color:#a16207; border:1px solid #fef08a;';
+    return 'background:#f1f5f9; color:#64748b; border:1px solid #e2e8f0;';
+  };
+
+  const observadoresList = [obs1, obs2, obs3].filter(Boolean).map((o, idx) => `<div><strong>Observador ${idx + 1}:</strong> ${o}</div>`).join('');
+
+  return `
+    <div class="rpt-caminata-box" style="padding:20px; font-family:system-ui, sans-serif; background:#fff; color:#0f172a;">
+      <!-- CABECERA DE REPORTE -->
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #0f766e; padding-bottom:12px; margin-bottom:16px;">
+        <div>
+          <div style="font-size:16px; font-weight:800; color:#0f766e;">LICEO TÉCNICO PROFESIONAL CAMPANARIO</div>
+          <div style="font-size:14px; font-weight:700; color:#334155;">PAUTA DE CAMINATA PEDAGÓGICA (PROYECTO ADECO)</div>
+          <div style="font-size:11px; color:#64748b;">Observación Breve de Aula (10 a 15 minutos) · Innovación Pedagógica</div>
+        </div>
+        <div style="text-align:right;">
+          <span style="display:inline-block; padding:4px 10px; border-radius:9999px; font-size:11px; font-weight:700; background:#ccfbf1; color:#0f766e; border:1px solid #99f6e4;">
+            ADECO · PEI
+          </span>
+          <div style="font-size:11px; color:#64748b; margin-top:4px;">ID: ${esc(e.id || 'N/A')}</div>
+        </div>
+      </div>
+
+      <!-- GRID IDENTIFICACIÓN -->
+      <table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:16px; border:1px solid #cbd5e1;">
+        <tr style="background:#f8fafc;">
+          <td style="padding:6px 10px; font-weight:700; border:1px solid #cbd5e1; width:15%;">Docente:</td>
+          <td style="padding:6px 10px; border:1px solid #cbd5e1; width:35%;">${docente} (${rut})</td>
+          <td style="padding:6px 10px; font-weight:700; border:1px solid #cbd5e1; width:15%;">Fecha / Hora:</td>
+          <td style="padding:6px 10px; border:1px solid #cbd5e1; width:35%;">${fecha} a las ${hora} hrs</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 10px; font-weight:700; border:1px solid #cbd5e1;">Asignatura / Curso:</td>
+          <td style="padding:6px 10px; border:1px solid #cbd5e1;">${asig} — ${curso}</td>
+          <td style="padding:6px 10px; font-weight:700; border:1px solid #cbd5e1;">Espacio / Tiempo:</td>
+          <td style="padding:6px 10px; border:1px solid #cbd5e1;">${lugar} (${tiempo})</td>
+        </tr>
+        <tr style="background:#f8fafc;">
+          <td style="padding:6px 10px; font-weight:700; border:1px solid #cbd5e1;">Sello PEI:</td>
+          <td style="padding:6px 10px; border:1px solid #cbd5e1;" colspan="3">💡 ${sello}</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 10px; font-weight:700; border:1px solid #cbd5e1;">Equipo Observador:</td>
+          <td style="padding:6px 10px; border:1px solid #cbd5e1;" colspan="3">
+            <div style="display:flex; gap:16px; flex-wrap:wrap;">
+              ${observadoresList}
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- MATRIZ DE DIMENSIONES -->
+      <div style="font-size:13px; font-weight:700; color:#0f766e; margin-bottom:8px;">📊 Matriz de Indicadores Observados</div>
+      <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:16px; border:1px solid #cbd5e1;">
+        <thead>
+          <tr style="background:#0f766e; color:#fff; text-align:left;">
+            <th style="padding:6px 8px; width:20%;">Dimensión</th>
+            <th style="width:40%; padding:6px 8px;">Indicador Observable</th>
+            <th style="width:20%; text-align:center; padding:6px 8px;">Valoración</th>
+            <th style="width:20%; padding:6px 8px;">Observaciones Técnicas</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- CONVIVENCIA -->
+          <tr>
+            <td rowspan="3" style="padding:6px; font-weight:700; background:#f0fdf4; border:1px solid #cbd5e1; vertical-align:top; color:#166534">🤝 Convivencia</td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${indNames.c1}</td>
+            <td style="padding:6px; text-align:center; border:1px solid #cbd5e1;"><span style="padding:2px 8px; border-radius:4px; font-weight:600; ${getBadgeClass(evals.c1?.val)}">${evals.c1?.val || 'Observable'}</span></td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${esc(evals.c1?.obs || '-')}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${indNames.c2}</td>
+            <td style="padding:6px; text-align:center; border:1px solid #cbd5e1;"><span style="padding:2px 8px; border-radius:4px; font-weight:600; ${getBadgeClass(evals.c2?.val)}">${evals.c2?.val || 'Observable'}</span></td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${esc(evals.c2?.obs || '-')}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${indNames.c3}</td>
+            <td style="padding:6px; text-align:center; border:1px solid #cbd5e1;"><span style="padding:2px 8px; border-radius:4px; font-weight:600; ${getBadgeClass(evals.c3?.val)}">${evals.c3?.val || 'Observable'}</span></td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${esc(evals.c3?.obs || '-')}</td>
+          </tr>
+
+          <!-- CURRICULUM -->
+          <tr>
+            <td rowspan="3" style="padding:6px; font-weight:700; background:#f0fdfa; border:1px solid #cbd5e1; vertical-align:top; color:#0f766e">📚 Curriculum</td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${indNames.cu1}</td>
+            <td style="padding:6px; text-align:center; border:1px solid #cbd5e1;"><span style="padding:2px 8px; border-radius:4px; font-weight:600; ${getBadgeClass(evals.cu1?.val)}">${evals.cu1?.val || 'Observable'}</span></td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${esc(evals.cu1?.obs || '-')}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${indNames.cu2}</td>
+            <td style="padding:6px; text-align:center; border:1px solid #cbd5e1;"><span style="padding:2px 8px; border-radius:4px; font-weight:600; ${getBadgeClass(evals.cu2?.val)}">${evals.cu2?.val || 'Observable'}</span></td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${esc(evals.cu2?.obs || '-')}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${indNames.cu3}</td>
+            <td style="padding:6px; text-align:center; border:1px solid #cbd5e1;"><span style="padding:2px 8px; border-radius:4px; font-weight:600; ${getBadgeClass(evals.cu3?.val)}">${evals.cu3?.val || 'Observable'}</span></td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${esc(evals.cu3?.obs || '-')}</td>
+          </tr>
+
+          <!-- INCLUSIÓN / PIE -->
+          <tr>
+            <td rowspan="3" style="padding:6px; font-weight:700; background:#fffbeb; border:1px solid #cbd5e1; vertical-align:top; color:#b45309">🧩 Inclusión / PIE</td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${indNames.i1}</td>
+            <td style="padding:6px; text-align:center; border:1px solid #cbd5e1;"><span style="padding:2px 8px; border-radius:4px; font-weight:600; ${getBadgeClass(evals.i1?.val)}">${evals.i1?.val || 'Observable'}</span></td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${esc(evals.i1?.obs || '-')}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${indNames.i2}</td>
+            <td style="padding:6px; text-align:center; border:1px solid #cbd5e1;"><span style="padding:2px 8px; border-radius:4px; font-weight:600; ${getBadgeClass(evals.i2?.val)}">${evals.i2?.val || 'Observable'}</span></td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${esc(evals.i2?.obs || '-')}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${indNames.i3}</td>
+            <td style="padding:6px; text-align:center; border:1px solid #cbd5e1;"><span style="padding:2px 8px; border-radius:4px; font-weight:600; ${getBadgeClass(evals.i3?.val)}">${evals.i3?.val || 'Observable'}</span></td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${esc(evals.i3?.obs || '-')}</td>
+          </tr>
+
+          <!-- EVALUACIÓN -->
+          <tr>
+            <td rowspan="3" style="padding:6px; font-weight:700; background:#eff6ff; border:1px solid #cbd5e1; vertical-align:top; color:#1d4ed8">📝 Evaluación</td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${indNames.e1}</td>
+            <td style="padding:6px; text-align:center; border:1px solid #cbd5e1;"><span style="padding:2px 8px; border-radius:4px; font-weight:600; ${getBadgeClass(evals.e1?.val)}">${evals.e1?.val || 'Observable'}</span></td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${esc(evals.e1?.obs || '-')}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${indNames.e2}</td>
+            <td style="padding:6px; text-align:center; border:1px solid #cbd5e1;"><span style="padding:2px 8px; border-radius:4px; font-weight:600; ${getBadgeClass(evals.e2?.val)}">${evals.e2?.val || 'Observable'}</span></td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${esc(evals.e2?.obs || '-')}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${indNames.e3}</td>
+            <td style="padding:6px; text-align:center; border:1px solid #cbd5e1;"><span style="padding:2px 8px; border-radius:4px; font-weight:600; ${getBadgeClass(evals.e3?.val)}">${evals.e3?.val || 'Observable'}</span></td>
+            <td style="padding:6px; border:1px solid #cbd5e1;">${esc(evals.e3?.obs || '-')}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- SÍNTESIS FORMATIVA -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+        <div style="border:1px solid #cbd5e1; border-radius:6px; padding:10px; background:#fafafa;">
+          <div style="font-size:12px; font-weight:700; color:#15803d; margin-bottom:4px;">🟢 Fortalezas Observadas (Máx 3)</div>
+          <div style="font-size:11px; white-space:pre-line; line-height:1.4;">${fortalezas || 'Sin fortalezas especificadas.'}</div>
+        </div>
+        <div style="border:1px solid #cbd5e1; border-radius:6px; padding:10px; background:#fafafa;">
+          <div style="font-size:12px; font-weight:700; color:#b45309; margin-bottom:4px;">🟡 Oportunidades de Mejora (Máx 2)</div>
+          <div style="font-size:11px; white-space:pre-line; line-height:1.4;">${mejoras || 'Sin oportunidades especificadas.'}</div>
+        </div>
+      </div>
+
+      <!-- MATRIZ DE COMPROMISOS -->
+      <div style="font-size:12px; font-weight:700; color:#0f766e; margin-bottom:6px;">🤝 Acuerdos de Mejora y Compromisos (Plan ADECO)</div>
+      <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:16px; border:1px solid #cbd5e1;">
+        <thead>
+          <tr style="background:#f1f5f9; text-align:left;">
+            <th style="padding:6px; border:1px solid #cbd5e1; width:35%;">Compromiso</th>
+            <th style="padding:6px; border:1px solid #cbd5e1; width:25%;">Responsable</th>
+            <th style="padding:6px; border:1px solid #cbd5e1; width:15%;">Plazo</th>
+            <th style="padding:6px; border:1px solid #cbd5e1; width:25%;">Evidencia</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${compromisos.length > 0 ? compromisos.map(c => `
+            <tr>
+              <td style="padding:6px; border:1px solid #cbd5e1;">${esc(c.comp || '-')}</td>
+              <td style="padding:6px; border:1px solid #cbd5e1;">${esc(c.resp || '-')}</td>
+              <td style="padding:6px; border:1px solid #cbd5e1;">${esc(c.plazo || '-')}</td>
+              <td style="padding:6px; border:1px solid #cbd5e1;">${esc(c.evidencia || '-')}</td>
+            </tr>
+          `).join('') : `
+            <tr>
+              <td colspan="4" style="padding:8px; text-align:center; color:#64748b; font-style:italic; border:1px solid #cbd5e1;">No se registraron compromisos formales en esta visita.</td>
+            </tr>
+          `}
+        </tbody>
+      </table>
+
+      <!-- NOTA TÉCNICA -->
+      <div style="border:1px solid #fef08a; background:#fefce8; padding:8px 12px; border-radius:4px; font-size:10px; color:#854d0e; margin-bottom:24px;">
+        <strong>Nota técnica:</strong> Esta pauta no evalúa la clase completa ni el desempeño integral del docente. Su finalidad es recoger evidencias objetivas observables durante una visita breve (10 a 15 min), por lo que los indicadores seleccionados corresponden exclusivamente a prácticas que pueden verificarse en cualquier momento de la sesión.
+      </div>
+
+      <!-- RECUADRO DE FIRMAS MÚLTIPLES HORIZONTALES (LADO A LADO) -->
+      <div class="firma-caminata-row" style="display: flex !important; flex-direction: row !important; justify-content: space-around !important; align-items: flex-end !important; gap: 16px !important; margin-top: 40px !important; width: 100% !important; text-align: center !important; page-break-inside: avoid !important;">
+        <div style="flex: 1; text-align: center;">
+          <br><br>
+          ________________________________________<br>
+          <span style="font-size:10px; font-weight:700; color:#334155;">Firma Observador 1</span><br>
+          <span style="font-size:9px; color:#64748b;">${obs1}</span>
+        </div>
+        ${obs2 ? `
+          <div style="flex: 1; text-align: center;">
+            <br><br>
+            ________________________________________<br>
+            <span style="font-size:10px; font-weight:700; color:#334155;">Firma Observador 2</span><br>
+            <span style="font-size:9px; color:#64748b;">${obs2}</span>
+          </div>
+        ` : ''}
+        ${obs3 ? `
+          <div style="flex: 1; text-align: center;">
+            <br><br>
+            ________________________________________<br>
+            <span style="font-size:10px; font-weight:700; color:#334155;">Firma Observador 3</span><br>
+            <span style="font-size:9px; color:#64748b;">${obs3}</span>
+          </div>
+        ` : ''}
+        <div style="flex: 1; text-align: center;">
+          <br><br>
+          ________________________________________<br>
+          <span style="font-size:10px; font-weight:700; color:#334155;">Firma Docente Visitado</span><br>
+          <span style="font-size:9px; color:#64748b;">${docente}</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
 
 

@@ -80,8 +80,9 @@
   <hr class="nav-divider">
   
   <div class="nav-section">
-    <div class="nav-label">Entrevistas</div>
+    <div class="nav-label">Entrevistas & Visitas</div>
     <div class="nav-item" onclick="limpiarForm(); goTo('nueva-entrevista')"><span class="icon">📝</span> Nueva entrevista</div>
+    <div class="nav-item" onclick="limpiarFormCaminata(); goTo('caminata-pedagogica')"><span class="icon">🚶‍♂️</span> Caminata Pedagógica <span class="badge-count" style="background:#0d9488; color:#fff;">ADECO</span></div>
     <div class="nav-item" onclick="goTo('historial')"><span class="icon">🕘</span> Historial <span class="badge-count" id="cnt-ent">0</span></div>
     <div class="nav-item" onclick="goTo('evidencias')"><span class="icon">📂</span> Evidencias y Drive</div>
     <div class="nav-item" onclick="goTo('reporte')"><span class="icon">📄</span> Ficha Impresión</div>
@@ -513,6 +514,336 @@
           <!-- Se cargará dinámicamente con JS -->
         </tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════ CAMINATA PEDAGÓGICA (PROYECTO ADECO) ══════════════ -->
+<div class="page" id="pg-caminata-pedagogica">
+  <div class="welcome-hero" style="background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%); margin-bottom: 20px;">
+    <h1>🚶‍♂️ Pauta de Caminata Pedagógica</h1>
+    <p>Observación Breve de Aula (10 a 15 minutos) · Proyecto ADECO & Innovación Pedagógica · Articulación con Sellos del PEI</p>
+  </div>
+
+  <!-- SECCIÓN 1: IDENTIFICACIÓN Y EQUIPO DE OBSERVACIÓN -->
+  <div class="card" style="margin-bottom: 20px;">
+    <div class="card-title" style="margin-bottom:16px; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px">
+      📋 Identificación de la Visita y Equipo de Observación
+      <button type="button" class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="abrirLookupCaminata()">🔍 Buscar Docente en Base de Datos</button>
+    </div>
+    
+    <div class="form-grid">
+      <div class="form-group">
+        <label>RUT Docente Visitado *</label>
+        <input id="cp-rut" placeholder="Ej: 15.345.678-K" onblur="autocompletarCaminata()">
+      </div>
+      <div class="form-group">
+        <label>Nombre Docente Visitado *</label>
+        <input id="cp-docente" placeholder="Nombre completo del profesor/a">
+      </div>
+      <div class="form-group">
+        <label>Asignatura *</label>
+        <input id="cp-asig" placeholder="Ej: Educación Matemática / Mecánica">
+      </div>
+      <div class="form-group">
+        <label>Curso *</label>
+        <input id="cp-curso" placeholder="Ej: 2° Medio B">
+      </div>
+    </div>
+
+    <div class="form-grid" style="margin-top: 16px;">
+      <div class="form-group">
+        <label>Fecha de Visita *</label>
+        <input type="date" id="cp-fecha">
+      </div>
+      <div class="form-group">
+        <label>Hora de Visita *</label>
+        <input type="time" id="cp-hora">
+      </div>
+      <div class="form-group">
+        <label>Tiempo Observado *</label>
+        <input id="cp-tiempo" value="10 a 15 minutos" placeholder="Ej: 15 minutos">
+      </div>
+      <div class="form-group">
+        <label>Lugar / Espacio *</label>
+        <input id="cp-lugar" placeholder="Ej: Sala de Clases N°4 / Taller de Mecánica">
+      </div>
+    </div>
+
+    <!-- MÚLTIPLES OBSERVADORES -->
+    <div class="card-title" style="margin-top:20px; margin-bottom:12px; font-size:14px; font-weight:600; color:var(--primary)">
+      👥 Equipo de Observadores Simultáneos (Proyecto ADECO)
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Observador 1 (Principal) *</label>
+        <select id="cp-obs1" style="width:100%"><option value="">Cargando personal...</option></select>
+      </div>
+      <div class="form-group">
+        <label>Observador 2 (Opcional)</label>
+        <select id="cp-obs2" style="width:100%"><option value="">-- Sin segundo observador --</option></select>
+      </div>
+      <div class="form-group">
+        <label>Observador 3 (Opcional)</label>
+        <select id="cp-obs3" style="width:100%"><option value="">-- Sin tercer observador --</option></select>
+      </div>
+    </div>
+
+    <!-- ENFOQUE ADECO Y SELLO PEI -->
+    <div class="form-grid" style="margin-top:16px;">
+      <div class="form-group">
+        <label>Proyecto / Enfoque Institucional</label>
+        <input id="cp-proyecto" value="Proyecto ADECO - Innovación Pedagógica" readonly style="background:var(--bg-app); font-weight:600;">
+      </div>
+      <div class="form-group">
+        <label>Articulación con Sello del PEI *</label>
+        <select id="cp-sello" style="width:100%">
+          <option value="Innovación Pedagógica e Inclusión">💡 Innovación Pedagógica e Inclusión</option>
+          <option value="Excelencia Técnico Profesional">⚙️ Excelencia Técnico Profesional</option>
+          <option value="Convivencia Escolar y Respeto">🤝 Convivencia Escolar y Respeto</option>
+          <option value="Formación Integral y Compromiso">🎓 Formación Integral y Compromiso</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECCIÓN 2: MATRIZ DE INDICADORES OBSERVABLES (4 DIMENSIONES) -->
+  <div class="card" style="margin-bottom: 20px;">
+    <div class="card-title" style="margin-bottom:12px; font-size:15px; font-weight:600">
+      📊 Indicadores Observables (Prácticas Pedagógicas de Aula)
+    </div>
+    <p style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">
+      Marque el nivel observatorio de cada indicador y agregue notas técnicas cualitativas en caso de ser necesario.
+    </p>
+
+    <!-- TABLA DE DIMENSIONES -->
+    <div class="tbl-wrap">
+      <table class="tbl-caminata" id="tbl-cp-indicadores" style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="background:var(--bg-body); border-bottom:2px solid var(--border);">
+            <th style="width:15%; text-align:left; padding:10px;">Dimensión</th>
+            <th style="width:35%; text-align:left; padding:10px;">Indicador Observable</th>
+            <th style="width:25%; text-align:center; padding:10px;">Valoración / Estado</th>
+            <th style="width:25%; text-align:left; padding:10px;">Observaciones Técnicas</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Dimensión 1: Convivencia -->
+          <tr style="border-bottom:1px solid var(--border)">
+            <td rowspan="3" style="font-weight:700; color:var(--primary); background:rgba(79,70,229,0.03); padding:10px; vertical-align:top">
+              🤝 Convivencia
+            </td>
+            <td style="padding:10px;">1.1. Existe un clima de respeto entre docente y estudiantes.</td>
+            <td style="padding:10px; text-align:center">
+              <select class="cp-eval-val" data-ind="c1" style="width:100%; font-size:12px;">
+                <option value="Observable">🟢 Observable / Cumplido</option>
+                <option value="En proceso">🟡 En proceso de ejecución</option>
+                <option value="No observado">⚪ No observado / No aplica</option>
+              </select>
+            </td>
+            <td style="padding:10px"><input class="cp-eval-obs" data-ind="c1" placeholder="Nota de evidencia..." style="width:100%; font-size:12px;"></td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:10px;">1.2. Los estudiantes permanecen involucrados en la actividad.</td>
+            <td style="padding:10px; text-align:center">
+              <select class="cp-eval-val" data-ind="c2" style="width:100%; font-size:12px;">
+                <option value="Observable">🟢 Observable / Cumplido</option>
+                <option value="En proceso">🟡 En proceso de ejecución</option>
+                <option value="No observado">⚪ No observado / No aplica</option>
+              </select>
+            </td>
+            <td style="padding:10px"><input class="cp-eval-obs" data-ind="c2" placeholder="Nota de evidencia..." style="width:100%; font-size:12px;"></td>
+          </tr>
+          <tr style="border-bottom:2px solid var(--border)">
+            <td style="padding:10px;">1.3. La organización del aula favorece el aprendizaje.</td>
+            <td style="padding:10px; text-align:center">
+              <select class="cp-eval-val" data-ind="c3" style="width:100%; font-size:12px;">
+                <option value="Observable">🟢 Observable / Cumplido</option>
+                <option value="En proceso">🟡 En proceso de ejecución</option>
+                <option value="No observado">⚪ No observado / No aplica</option>
+              </select>
+            </td>
+            <td style="padding:10px"><input class="cp-eval-obs" data-ind="c3" placeholder="Nota de evidencia..." style="width:100%; font-size:12px;"></td>
+          </tr>
+
+          <!-- Dimensión 2: Curriculum -->
+          <tr style="border-bottom:1px solid var(--border)">
+            <td rowspan="3" style="font-weight:700; color:#0d9488; background:rgba(13,148,136,0.03); padding:10px; vertical-align:top">
+              📚 Curriculum
+            </td>
+            <td style="padding:10px;">2.1. Las instrucciones son claras y comprensibles.</td>
+            <td style="padding:10px; text-align:center">
+              <select class="cp-eval-val" data-ind="cu1" style="width:100%; font-size:12px;">
+                <option value="Observable">🟢 Observable / Cumplido</option>
+                <option value="En proceso">🟡 En proceso de ejecución</option>
+                <option value="No observado">⚪ No observado / No aplica</option>
+              </select>
+            </td>
+            <td style="padding:10px"><input class="cp-eval-obs" data-ind="cu1" placeholder="Nota de evidencia..." style="width:100%; font-size:12px;"></td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:10px;">2.2. El docente utiliza estrategias metodológicas activas.</td>
+            <td style="padding:10px; text-align:center">
+              <select class="cp-eval-val" data-ind="cu2" style="width:100%; font-size:12px;">
+                <option value="Observable">🟢 Observable / Cumplido</option>
+                <option value="En proceso">🟡 En proceso de ejecución</option>
+                <option value="No observado">⚪ No observado / No aplica</option>
+              </select>
+            </td>
+            <td style="padding:10px"><input class="cp-eval-obs" data-ind="cu2" placeholder="Nota de evidencia..." style="width:100%; font-size:12px;"></td>
+          </tr>
+          <tr style="border-bottom:2px solid var(--border)">
+            <td style="padding:10px;">2.3. El docente monitorea el trabajo de los estudiantes.</td>
+            <td style="padding:10px; text-align:center">
+              <select class="cp-eval-val" data-ind="cu3" style="width:100%; font-size:12px;">
+                <option value="Observable">🟢 Observable / Cumplido</option>
+                <option value="En proceso">🟡 En proceso de ejecución</option>
+                <option value="No observado">⚪ No observado / No aplica</option>
+              </select>
+            </td>
+            <td style="padding:10px"><input class="cp-eval-obs" data-ind="cu3" placeholder="Nota de evidencia..." style="width:100%; font-size:12px;"></td>
+          </tr>
+
+          <!-- Dimensión 3: Inclusión / PIE -->
+          <tr style="border-bottom:1px solid var(--border)">
+            <td rowspan="3" style="font-weight:700; color:#d97706; background:rgba(217,119,6,0.03); padding:10px; vertical-align:top">
+              🧩 Inclusión / PIE
+            </td>
+            <td style="padding:10px;">3.1. Se promueve la participación de todos los estudiantes.</td>
+            <td style="padding:10px; text-align:center">
+              <select class="cp-eval-val" data-ind="i1" style="width:100%; font-size:12px;">
+                <option value="Observable">🟢 Observable / Cumplido</option>
+                <option value="En proceso">🟡 En proceso de ejecución</option>
+                <option value="No observado">⚪ No observado / No aplica</option>
+              </select>
+            </td>
+            <td style="padding:10px"><input class="cp-eval-obs" data-ind="i1" placeholder="Nota de evidencia..." style="width:100%; font-size:12px;"></td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:10px;">3.2. Se observan estrategias diversificadas cuando son necesarias.</td>
+            <td style="padding:10px; text-align:center">
+              <select class="cp-eval-val" data-ind="i2" style="width:100%; font-size:12px;">
+                <option value="Observable">🟢 Observable / Cumplido</option>
+                <option value="En proceso">🟡 En proceso de ejecución</option>
+                <option value="No observado">⚪ No observado / No aplica</option>
+              </select>
+            </td>
+            <td style="padding:10px"><input class="cp-eval-obs" data-ind="i2" placeholder="Nota de evidencia..." style="width:100%; font-size:12px;"></td>
+          </tr>
+          <tr style="border-bottom:2px solid var(--border)">
+            <td style="padding:10px;">3.3. El docente entrega apoyos oportunos.</td>
+            <td style="padding:10px; text-align:center">
+              <select class="cp-eval-val" data-ind="i3" style="width:100%; font-size:12px;">
+                <option value="Observable">🟢 Observable / Cumplido</option>
+                <option value="En proceso">🟡 En proceso de ejecución</option>
+                <option value="No observado">⚪ No observado / No aplica</option>
+              </select>
+            </td>
+            <td style="padding:10px"><input class="cp-eval-obs" data-ind="i3" placeholder="Nota de evidencia..." style="width:100%; font-size:12px;"></td>
+          </tr>
+
+          <!-- Dimensión 4: Evaluación -->
+          <tr style="border-bottom:1px solid var(--border)">
+            <td rowspan="3" style="font-weight:700; color:#2563eb; background:rgba(37,99,235,0.03); padding:10px; vertical-align:top">
+              📝 Evaluación
+            </td>
+            <td style="padding:10px;">4.1. El docente verifica la comprensión durante la clase.</td>
+            <td style="padding:10px; text-align:center">
+              <select class="cp-eval-val" data-ind="e1" style="width:100%; font-size:12px;">
+                <option value="Observable">🟢 Observable / Cumplido</option>
+                <option value="En proceso">🟡 En proceso de ejecución</option>
+                <option value="No observado">⚪ No observado / No aplica</option>
+              </select>
+            </td>
+            <td style="padding:10px"><input class="cp-eval-obs" data-ind="e1" placeholder="Nota de evidencia..." style="width:100%; font-size:12px;"></td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:10px;">4.2. Entrega retroalimentación formativa.</td>
+            <td style="padding:10px; text-align:center">
+              <select class="cp-eval-val" data-ind="e2" style="width:100%; font-size:12px;">
+                <option value="Observable">🟢 Observable / Cumplido</option>
+                <option value="En proceso">🟡 En proceso de ejecución</option>
+                <option value="No observado">⚪ No observado / No aplica</option>
+              </select>
+            </td>
+            <td style="padding:10px"><input class="cp-eval-obs" data-ind="e2" placeholder="Nota de evidencia..." style="width:100%; font-size:12px;"></td>
+          </tr>
+          <tr>
+            <td style="padding:10px;">4.3. Realiza ajustes según la respuesta de los estudiantes.</td>
+            <td style="padding:10px; text-align:center">
+              <select class="cp-eval-val" data-ind="e3" style="width:100%; font-size:12px;">
+                <option value="Observable">🟢 Observable / Cumplido</option>
+                <option value="En proceso">🟡 En proceso de ejecución</option>
+                <option value="No observado">⚪ No observado / No aplica</option>
+              </select>
+            </td>
+            <td style="padding:10px"><input class="cp-eval-obs" data-ind="e3" placeholder="Nota de evidencia..." style="width:100%; font-size:12px;"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SECCIÓN 3: SÍNTESIS DE LA OBSERVACIÓN -->
+  <div class="card" style="margin-bottom: 20px;">
+    <div class="card-title" style="margin-bottom:16px; font-size:15px; font-weight:600">
+      📝 Síntesis Formativa de la Visita
+    </div>
+    
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Fortalezas Observadas (Máximo 3) *</label>
+        <textarea id="cp-fortalezas" rows="4" placeholder="1. Dominio de aula...\n2. Instrucciones claras...\n3. Buen uso del tiempo..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Oportunidades de Mejora (Máximo 2) *</label>
+        <textarea id="cp-mejoras" rows="4" placeholder="1. Mayor diversificación de apoyos...\n2. Reforzar verificación de aprendizaje al cierre..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECCIÓN 4: ACUERDOS DE MEJORA (MATRIZ DINÁMICA) -->
+  <div class="card" style="margin-bottom: 20px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+      <div class="card-title" style="margin:0; font-size:15px; font-weight:600">
+        🤝 Acuerdos de Mejora y Compromisos (Plan ADECO)
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="agregarFilaCompromisoCaminata()">➕ Agregar Compromiso</button>
+    </div>
+    
+    <div class="tbl-wrap">
+      <table style="width:100%; border-collapse:collapse;" id="tbl-cp-compromisos">
+        <thead>
+          <tr style="background:var(--bg-body); border-bottom:2px solid var(--border);">
+            <th style="padding:8px; text-align:left; width:35%">Compromiso Asumido</th>
+            <th style="padding:8px; text-align:left; width:25%">Responsable</th>
+            <th style="padding:8px; text-align:left; width:15%">Plazo Límite</th>
+            <th style="padding:8px; text-align:left; width:20%">Evidencia Requerida</th>
+            <th style="padding:8px; text-align:center; width:5%">Acción</th>
+          </tr>
+        </thead>
+        <tbody id="cp-compromisos-body">
+          <!-- Se llenará dinámicamente con JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SECCIÓN 5: OBSERVACIÓN TÉCNICA Y ACCIONES -->
+  <div class="card">
+    <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.3); border-radius:8px; padding:14px; margin-bottom:16px;">
+      <div style="font-weight:700; color:#d97706; font-size:13px; margin-bottom:4px">⚠️ Nota Técnica Oficial</div>
+      <div style="font-size:12px; color:var(--text-secondary); line-height:1.5">
+        Esta pauta no evalúa la clase completa ni el desempeño integral del docente. Su finalidad es recoger evidencias objetivas observables durante una visita breve (10 a 15 min), por lo que los indicadores seleccionados corresponden exclusivamente a prácticas que pueden verificarse en cualquier momento de la sesión.
+      </div>
+    </div>
+
+    <div class="btn-row" id="cp-btn-row">
+      <button class="btn btn-primary" onclick="guardarCaminataPedagogica()">💾 Guardar Caminata Pedagógica</button>
+      <button class="btn btn-success" onclick="previsualizarCaminata()">👁 Previsualizar Ficha Oficial</button>
+      <button class="btn btn-secondary" onclick="abrirMultivistaModal()" style="display:flex; align-items:center; gap:6px;">📺 Compartir Pantalla (QR)</button>
+      <button class="btn btn-secondary" onclick="limpiarFormCaminata()">✖ Limpiar Formulario</button>
     </div>
   </div>
 </div>
