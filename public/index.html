@@ -1443,29 +1443,33 @@
 
 <!-- LOOKUP PERSON MODAL -->
 <div class="modal-bg" id="modal-lookup">
-  <div class="modal">
+  <div class="modal" style="max-width: 880px; width: 92vw;">
     <div class="modal-header">
-      <div class="modal-title">🔍 Selector de Personas</div>
+      <div class="modal-title" style="display:flex; align-items:center; gap:8px; font-size:17px; font-weight:700;">
+        🔍 Selector de Personas (Búsqueda Rápida)
+      </div>
       <button class="modal-close" onclick="cerrarLookup()">✖</button>
     </div>
-    <div class="search-row">
-      <input id="l-q" placeholder="Buscar por RUT, nombre o curso..." oninput="filtrarLookup()">
-      <select id="l-filtro" onchange="filtrarLookup()">
+    
+    <div class="search-row" style="margin-bottom: 16px; display: grid; grid-template-columns: 2fr 1fr; gap: 12px;">
+      <input id="l-q" placeholder="🔎 Buscar por RUT, Nombres, Apellidos o Curso..." oninput="filtrarLookup()" style="padding: 10px 14px; font-size: 14px;">
+      <select id="l-filtro" onchange="filtrarLookup()" style="padding: 10px 14px; font-size: 14px;">
         <option value="">Todos los estamentos</option>
-        <option value="Estudiante">Estudiantes</option>
-        <option value="Docente">Docentes</option>
-        <option value="Asistente de la educación">Asistentes educación</option>
+        <option value="Estudiante">🎒 Estudiantes</option>
+        <option value="Docente">👨‍🏫 Docentes</option>
+        <option value="Asistente de la educación">👥 Asistentes Educación</option>
       </select>
     </div>
-    <div class="tbl-wrap" style="max-height: 380px; overflow-y: auto;">
-      <table id="tbl-lookup">
+
+    <div class="tbl-wrap" style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px;">
+      <table id="tbl-lookup" style="width: 100%; border-collapse: collapse;">
         <thead>
-          <tr>
-            <th>RUT</th>
-            <th>Nombres y Apellidos</th>
-            <th>Estamento</th>
-            <th>Curso / Función</th>
-            <th>Acción</th>
+          <tr style="background: var(--bg-body); border-bottom: 2px solid var(--border); position: sticky; top: 0; z-index: 10;">
+            <th style="padding: 10px 14px; text-align: left; width: 22%;">RUT</th>
+            <th style="padding: 10px 14px; text-align: left; width: 34%;">Nombres y Apellidos</th>
+            <th style="padding: 10px 14px; text-align: left; width: 22%;">Estamento</th>
+            <th style="padding: 10px 14px; text-align: left; width: 12%;">Curso / Función</th>
+            <th style="padding: 10px 14px; text-align: center; width: 10%;">Acción</th>
           </tr>
         </thead>
         <tbody></tbody>

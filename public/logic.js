@@ -1029,10 +1029,17 @@ async function filtrarAsi() {
   }
 }
 
-// ══ SELECTOR LOOKUP MODAL ══
-function abrirLookup() {
+let lookupCallback = null;
+
+function abrirLookup(callback) {
+  lookupCallback = (typeof callback === 'function') ? callback : null;
   document.getElementById('modal-lookup').classList.add('open');
+  const qInput = document.getElementById('l-q');
+  if (qInput) qInput.value = '';
+  const fSelect = document.getElementById('l-filtro');
+  if (fSelect) fSelect.value = '';
   filtrarLookup();
+  setTimeout(() => { if (qInput) qInput.focus(); }, 150);
 }
 
 function cerrarLookup() {
@@ -1040,25 +1047,54 @@ function cerrarLookup() {
 }
 
 async function filtrarLookup() {
-  const q = txt(document.getElementById('l-q').value).toLowerCase();
+  const qVal = txt(document.getElementById('l-q').value).toLowerCase();
   const f = document.getElementById('l-filtro').value;
   try {
-    const res = await fetch(`/api/personas/buscar?q=${encodeURIComponent(q)}&filtro=${encodeURIComponent(f)}`);
+    const res = await fetch(`/api/personas/buscar?q=${encodeURIComponent(qVal)}&filtro=${encodeURIComponent(f)}`);
     const rows = await res.json();
     
     const tbody = document.querySelector('#tbl-lookup tbody');
-    tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">No hay coincidencias.</td></tr>' :
-    rows.map(p => {
-      const rut = p.RUT;
+    if (!rows || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 28px; color:var(--text-muted)">No se encontraron coincidencias de personas.</td></tr>';
+      return;
+    }
+    
+    tbody.innerHTML = rows.map(p => {
+      const rawRut = p.RUT || p.Rut || '';
+      const formattedRut = formatearRut(rawRut) || rawRut;
       const name = [p.Nombres, p['Apellido Paterno'] || p['Apellido paterno'] || '', p['Apellido Materno'] || p['Apellido materno'] || ''].join(' ').trim().replace(/\s+/g,' ');
-      const est = p.Cargo;
-      const c = p.Curso || p['Función/curso'] || '';
-      return `<tr>
-        <td><span class="rut">${esc(rut)}</span></td>
-        <td><strong>${esc(name)}</strong></td>
-        <td><span class="badge ${est === 'Estudiante' ? 'badge-azul' : 'badge-verde'}">${esc(est)}</span></td>
-        <td>${esc(c)}</td>
-        <td><button class="btn btn-sm btn-primary" onclick="seleccionarPersona('${esc(rut)}')">Seleccionar</button></td>
+      const est = p.Cargo || p.Perfil || 'Estudiante';
+      const c = p.Curso || p['Función/curso'] || '-';
+      
+      let badgeStyle = 'background: rgba(16, 185, 129, 0.12); color: #047857; border: 1px solid rgba(16, 185, 129, 0.25);';
+      if (est.toLowerCase().includes('estudiante')) {
+        badgeStyle = 'background: rgba(59, 130, 246, 0.12); color: #1d4ed8; border: 1px solid rgba(59, 130, 246, 0.25);';
+      } else if (est.toLowerCase().includes('asistente')) {
+        badgeStyle = 'background: rgba(139, 92, 246, 0.12); color: #6d28d9; border: 1px solid rgba(139, 92, 246, 0.25);';
+      }
+      
+      return `<tr style="border-bottom: 1px solid var(--border); transition: background 0.15s ease;">
+        <td style="padding: 10px 14px; white-space: nowrap;">
+          <span style="font-family: monospace; font-size: 13px; font-weight: 700; background: rgba(79, 70, 229, 0.08); color: var(--primary); padding: 5px 10px; border-radius: 6px; border: 1px solid rgba(79, 70, 229, 0.18); display: inline-block;">
+            ${esc(formattedRut)}
+          </span>
+        </td>
+        <td style="padding: 10px 14px;">
+          <strong style="color: var(--text-primary); font-size: 13.5px;">${esc(name)}</strong>
+        </td>
+        <td style="padding: 10px 14px; white-space: nowrap;">
+          <span style="font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; display: inline-block; ${badgeStyle}">
+            ${esc(est)}
+          </span>
+        </td>
+        <td style="padding: 10px 14px; font-size: 12.5px; color: var(--text-secondary); white-space: nowrap;">
+          ${esc(c)}
+        </td>
+        <td style="padding: 10px 14px; text-align: center; white-space: nowrap;">
+          <button type="button" class="btn btn-sm btn-primary" onclick="seleccionarPersona('${esc(rawRut)}')" style="padding: 6px 14px; font-size: 12px; font-weight: 600; white-space: nowrap;">
+            Seleccionar ➔
+          </button>
+        </td>
       </tr>`;
     }).join('');
   } catch (e) {
@@ -1067,7 +1103,29 @@ async function filtrarLookup() {
 }
 
 function seleccionarPersona(rut) {
-  document.getElementById('e-rut').value = rut;
+  const formatted = formatearRut(rut) || rut;
+  
+  if (typeof lookupCallback === 'function') {
+    const cb = lookupCallback;
+    lookupCallback = null;
+    cerrarLookup();
+    
+    fetch(`/api/personas/buscar?q=${encodeURIComponent(rut)}`)
+      .then(r => r.json())
+      .then(rows => {
+        const cleanTarget = rut.replace(/[^0-9kK]/g, '').toUpperCase();
+        const p = (rows || []).find(x => (x.RUT || x.Rut || '').replace(/[^0-9kK]/g, '').toUpperCase() === cleanTarget) || { RUT: formatted };
+        cb(p);
+        toast(`👤 Persona seleccionada: ${p.Nombres || formatted}`);
+      })
+      .catch(() => {
+        cb({ RUT: formatted });
+        toast(`👤 Persona seleccionada: ${formatted}`);
+      });
+    return;
+  }
+
+  document.getElementById('e-rut').value = formatted;
   autocompletarEnt();
   cerrarLookup();
   toast('👤 Persona seleccionada');
