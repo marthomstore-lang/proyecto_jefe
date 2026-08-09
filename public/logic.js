@@ -4505,10 +4505,10 @@ function agregarFilaCompromisoCaminata(compData = {}) {
   const tr = document.createElement('tr');
   tr.style.borderBottom = '1px solid var(--border)';
   tr.innerHTML = `
-    <td style="padding:6px;"><input class="cp-comp-desc" value="${esc(compData.comp || '')}" placeholder="Ej: Diversificar guías de trabajo..." style="width:100%; font-size:12px;"></td>
+    <td style="padding:6px;"><textarea class="cp-comp-desc" rows="2" placeholder="Ej: Diversificar guías de trabajo..." oninput="this.style.height = ''; this.style.height = Math.max(38, this.scrollHeight) + 'px'">${esc(compData.comp || '')}</textarea></td>
     <td style="padding:6px;"><input class="cp-comp-resp" value="${esc(compData.resp || '')}" placeholder="Ej: Docente y UTP" style="width:100%; font-size:12px;"></td>
     <td style="padding:6px;"><input type="date" class="cp-comp-plazo" value="${esc(compData.plazo || '')}" style="width:100%; font-size:12px;"></td>
-    <td style="padding:6px;"><input class="cp-comp-evid" value="${esc(compData.evidencia || '')}" placeholder="Ej: Planificación de aula" style="width:100%; font-size:12px;"></td>
+    <td style="padding:6px;"><textarea class="cp-comp-evid" rows="2" placeholder="Ej: Planificación de aula" oninput="this.style.height = ''; this.style.height = Math.max(38, this.scrollHeight) + 'px'">${esc(compData.evidencia || '')}</textarea></td>
     <td style="padding:6px; text-align:center;"><button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('tr').remove()" style="padding:4px 8px; color:var(--danger)">🗑️</button></td>
   `;
   tbody.appendChild(tr);

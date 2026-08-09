@@ -1458,3 +1458,28 @@ body.login-active {
   font-family: var(--font-title);
   margin-top: 2px;
 }
+
+/* ── TEXTAREAS MULTILÍNEA DE OBSERVACIONES Y EVIDENCIAS ── */
+.cp-eval-obs, .cp-comp-desc, .cp-comp-evid {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  min-height: 38px !important;
+  font-family: inherit !important;
+  font-size: 12.5px !important;
+  padding: 8px 10px !important;
+  border-radius: 6px !important;
+  border: 1px solid var(--border) !important;
+  resize: vertical !important;
+  line-height: 1.4 !important;
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  background: var(--bg-card, #ffffff) !important;
+  color: var(--text-primary, #0f172a) !important;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.cp-eval-obs:focus, .cp-comp-desc:focus, .cp-comp-evid:focus {
+  border-color: var(--primary, #4f46e5) !important;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15) !important;
+  outline: none !important;
+}
