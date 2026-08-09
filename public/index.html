@@ -536,7 +536,7 @@
     <div class="form-grid">
       <div class="form-group">
         <label>RUT Docente Visitado *</label>
-        <input id="cp-rut" placeholder="Ej: 15.345.678-K" onblur="autocompletarCaminata()">
+        <input id="cp-rut" placeholder="Ej: 15.345.678-K" oninput="formatearRutInput(this)" onblur="autocompletarCaminata()">
       </div>
       <div class="form-group">
         <label>Nombre Docente Visitado *</label>
@@ -863,7 +863,7 @@
     <div class="form-grid">
       <div class="form-group">
         <label>RUT entrevistado</label>
-        <input id="e-rut" placeholder="Ej: 12.345.678-9" onblur="autocompletarEnt()">
+        <input id="e-rut" placeholder="Ej: 12.345.678-9" oninput="formatearRutInput(this)" onblur="autocompletarEnt()">
       </div>
       <div class="form-group">
         <label>Nombre completo</label>

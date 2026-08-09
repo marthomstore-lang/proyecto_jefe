@@ -1367,22 +1367,76 @@ async function entrevistar(rut) {
   goTo('nueva-entrevista');
 }
 
+function formatearRut(rut) {
+  if (!rut) return '';
+  let clean = String(rut).replace(/[^0-9kK]/g, '').toUpperCase();
+  if (clean.length < 2) return clean;
+  
+  let body = clean.slice(0, -1);
+  let dv = clean.slice(-1);
+  
+  let formattedBody = body.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${formattedBody}-${dv}`;
+}
+
+function formatearRutInput(input) {
+  if (!input) return;
+  const raw = input.value;
+  if (!raw) return;
+  const clean = raw.replace(/[^0-9kK]/g, '').toUpperCase();
+  if (clean.length >= 7) {
+    const formatted = formatearRut(clean);
+    if (formatted && input.value !== formatted) {
+      input.value = formatted;
+    }
+  }
+}
+
 async function autocompletarEnt() {
-  const rut = document.getElementById('e-rut').value.trim();
+  const rutInput = document.getElementById('e-rut');
+  if (!rutInput) return;
+  let rut = rutInput.value.trim();
   if (!rut) return;
+
+  const formatted = formatearRut(rut);
+  if (formatted) {
+    rutInput.value = formatted;
+    rut = formatted;
+  }
+
+  const cleanRut = rut.replace(/[^0-9kK]/g, '').toUpperCase();
+  if (cleanRut.length < 7) return;
+
   try {
-    const res = await fetch(`/api/personas/buscar?q=${encodeURIComponent(rut)}`);
-    const results = await res.json();
-    const p = results.find(x => txt(x.RUT).toUpperCase() === txt(rut).toUpperCase());
-    if (!p) return;
-    
-    document.getElementById('e-nombre').value = [p.Nombres, p['Apellido Paterno'] || p['Apellido paterno'] || '', p['Apellido Materno'] || p['Apellido materno'] || ''].join(' ').trim().replace(/\s+/g, ' ');
-    document.getElementById('e-cargo').value = txt(p.Cargo);
-    document.getElementById('e-curso').value = txt(p.Curso || p['Función/curso'] || '');
-    document.getElementById('e-jefe').value = txt(p['Profesor Jefe'] || p['Profesor jefe (curso)'] || 'No aplica');
-    document.getElementById('e-asig').value = txt(p['Asignatura'] || p['Profesor de Asignatura'] || 'No aplica');
-    document.getElementById('e-pie').value = txt(p['Profesor PIE'] || 'No aplica');
-    await cargarHistorialCita(rut);
+    let p = null;
+    const res = await fetch(`/api/personas/buscar?q=${encodeURIComponent(cleanRut)}`);
+    if (res.ok) {
+      const results = await res.json();
+      p = results.find(x => {
+        const xClean = (x.RUT || x.Rut || x.rut || '').replace(/[^0-9kK]/g, '').toUpperCase();
+        return xClean === cleanRut;
+      });
+    }
+
+    if (!p) {
+      const resSingle = await fetch(`/api/persona?rut=${encodeURIComponent(cleanRut)}`);
+      if (resSingle.ok) {
+        const single = await resSingle.json();
+        if (single && (single.RUT || single.Rut || single.Nombres)) p = single;
+      }
+    }
+
+    if (p) {
+      const nom = [p.Nombres, p['Apellido Paterno'] || p['Apellido paterno'] || '', p['Apellido Materno'] || p['Apellido materno'] || ''].filter(Boolean).join(' ').trim().replace(/\s+/g, ' ');
+      document.getElementById('e-nombre').value = nom;
+      document.getElementById('e-cargo').value = txt(p.Cargo || p.Perfil || 'Estudiante');
+      document.getElementById('e-curso').value = txt(p.Curso || p['Función/curso'] || '');
+      document.getElementById('e-jefe').value = txt(p['Profesor Jefe'] || p['Profesor jefe (curso)'] || 'No aplica');
+      document.getElementById('e-asig').value = txt(p['Asignatura'] || p['Profesor de Asignatura'] || 'No aplica');
+      document.getElementById('e-pie').value = txt(p['Profesor PIE'] || 'No aplica');
+      await cargarHistorialCita(rut);
+      toast(`✅ Persona encontrada: ${nom}`);
+    }
   } catch(e) {
     console.error("Error autocompleting:", e);
   }
@@ -4343,18 +4397,43 @@ function abrirLookupCaminata() {
 async function autocompletarCaminata() {
   const rutInput = document.getElementById('cp-rut');
   if (!rutInput) return;
-  const rut = rutInput.value.trim();
+  let rut = rutInput.value.trim();
   if (!rut) return;
 
+  const formatted = formatearRut(rut);
+  if (formatted) {
+    rutInput.value = formatted;
+    rut = formatted;
+  }
+
+  const cleanRut = rut.replace(/[^0-9kK]/g, '').toUpperCase();
+  if (cleanRut.length < 7) return;
+
   try {
-    const res = await fetch(`/api/persona?rut=${encodeURIComponent(rut)}`);
+    let p = null;
+    const res = await fetch(`/api/personas/buscar?q=${encodeURIComponent(cleanRut)}`);
     if (res.ok) {
-      const p = await res.json();
-      if (p) {
-        document.getElementById('cp-docente').value = [p.Nombres, p['Apellido Paterno'], p['Apellido Materno']].filter(Boolean).join(' ').trim();
-        document.getElementById('cp-asig').value = p.Asignatura || p['Profesor de Asignatura'] || p.Cargo || 'Docente de Aula';
-        document.getElementById('cp-curso').value = p.Curso || p['Función/curso'] || 'Varios Cursos';
+      const results = await res.json();
+      p = results.find(x => {
+        const xClean = (x.RUT || x.Rut || x.rut || '').replace(/[^0-9kK]/g, '').toUpperCase();
+        return xClean === cleanRut;
+      });
+    }
+
+    if (!p) {
+      const resSingle = await fetch(`/api/persona?rut=${encodeURIComponent(cleanRut)}`);
+      if (resSingle.ok) {
+        const single = await resSingle.json();
+        if (single && (single.RUT || single.Rut || single.Nombres)) p = single;
       }
+    }
+
+    if (p) {
+      const nom = [p.Nombres, p['Apellido Paterno'] || p['Apellido paterno'] || '', p['Apellido Materno'] || p['Apellido materno'] || ''].filter(Boolean).join(' ').trim().replace(/\s+/g, ' ');
+      document.getElementById('cp-docente').value = nom;
+      document.getElementById('cp-asig').value = p.Asignatura || p['Profesor de Asignatura'] || p.Cargo || 'Docente de Aula';
+      document.getElementById('cp-curso').value = p.Curso || p['Función/curso'] || 'Varios Cursos';
+      toast(`✅ Docente encontrado: ${nom}`);
     }
   } catch(e) {
     console.error("Error al autocompletar caminata:", e);
