@@ -15,6 +15,20 @@ def clean_rut_str(s):
         return ""
     return re.sub(r'[^0-9kK]', '', str(s)).upper()
 
+def match_rut_or_text(q, q_clean, target_raw, text_to_check=""):
+    if not q:
+        return True
+    target_str = str(target_raw or '').lower()
+    if q in target_str:
+        return True
+    if text_to_check and q in str(text_to_check).lower():
+        return True
+    if q_clean:
+        target_clean = clean_rut_str(target_raw)
+        if target_clean and (q_clean in target_clean or target_clean in q_clean):
+            return True
+    return False
+
 PORT = 8080
 DB_PATH = os.path.join(os.path.dirname(__file__), 'campanario.db')
 PUBLIC_DIR = os.path.join(os.path.dirname(__file__), 'public')
@@ -464,9 +478,8 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                     cursor.execute("SELECT *, (SELECT COUNT(*) FROM anotaciones_estudiante WHERE rut_estudiante = estudiantes.rut) as anotaciones_count FROM estudiantes")
                     for row in cursor.fetchall():
                         r = dict(row)
-                        name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''}".lower()
-                        rut_clean = clean_rut_str(r['rut'])
-                        if not q or (q_clean and q_clean in rut_clean) or (q in (r['rut'] or '').lower()) or (q in name_str):
+                        name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''}"
+                        if match_rut_or_text(q, q_clean, r['rut'], name_str):
                             results.append({
                                 "RUT": r['rut'],
                                 "Nombres": r['nombres'],
@@ -488,9 +501,8 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                     cursor.execute("SELECT * FROM docentes")
                     for row in cursor.fetchall():
                         r = dict(row)
-                        name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''}".lower()
-                        rut_clean = clean_rut_str(r['rut'])
-                        if not q or (q_clean and q_clean in rut_clean) or (q in (r['rut'] or '').lower()) or (q in name_str) or (q in (r['asignatura'] or '').lower()):
+                        name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''} {r['asignatura'] or ''}"
+                        if match_rut_or_text(q, q_clean, r['rut'], name_str):
                             results.append({
                                 "RUT": r['rut'],
                                 "Nombres": r['nombres'],
@@ -509,9 +521,8 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                     cursor.execute("SELECT * FROM asistentes")
                     for row in cursor.fetchall():
                         r = dict(row)
-                        name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''}".lower()
-                        rut_clean = clean_rut_str(r['rut'])
-                        if not q or (q_clean and q_clean in rut_clean) or (q in (r['rut'] or '').lower()) or (q in name_str) or (q in (r['funcion_curso'] or '').lower()):
+                        name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''} {r['funcion_curso'] or ''}"
+                        if match_rut_or_text(q, q_clean, r['rut'], name_str):
                             results.append({
                                 "RUT": r['rut'],
                                 "Nombres": r['nombres'],
@@ -529,6 +540,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
             # ── 3. LISTADO DE ESTUDIANTES ──
             elif path == '/api/estudiantes':
                 q = query.get('q', [''])[0].strip().lower()
+                q_clean = clean_rut_str(q)
                 curso = query.get('curso', [''])[0].strip()
                 estado = query.get('estado', [''])[0].strip()
                 
@@ -545,8 +557,8 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 results = []
                 for row in cursor.fetchall():
                     r = dict(row)
-                    name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''}".lower()
-                    if not q or q in (r['rut'] or '').lower() or q in name_str:
+                    name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''}"
+                    if match_rut_or_text(q, q_clean, r['rut'], name_str):
                         results.append({
                             "RUT": r['rut'],
                             "Nombres": r['nombres'],
@@ -566,6 +578,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
             # ── 4. LISTADO DE DOCENTES ──
             elif path == '/api/docentes':
                 q = query.get('q', [''])[0].strip().lower()
+                q_clean = clean_rut_str(q)
                 func = query.get('func', [''])[0].strip()
                 
                 sql = "SELECT * FROM docentes WHERE 1=1"
@@ -578,8 +591,8 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 results = []
                 for row in cursor.fetchall():
                     r = dict(row)
-                    name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''}".lower()
-                    if not q or q in (r['rut'] or '').lower() or q in name_str or q in (r['asignatura'] or '').lower():
+                    name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''} {r['asignatura'] or ''}"
+                    if match_rut_or_text(q, q_clean, r['rut'], name_str):
                         results.append({
                             "RUT": r['rut'],
                             "Nombres": r['nombres'],
@@ -595,6 +608,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
             # ── 5. LISTADO DE ASISTENTES ──
             elif path == '/api/asistentes':
                 q = query.get('q', [''])[0].strip().lower()
+                q_clean = clean_rut_str(q)
                 func = query.get('func', [''])[0].strip()
                 
                 sql = "SELECT * FROM asistentes WHERE 1=1"
@@ -607,8 +621,8 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 results = []
                 for row in cursor.fetchall():
                     r = dict(row)
-                    name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''}".lower()
-                    if not q or q in (r['rut'] or '').lower() or q in name_str or q in (r['funcion_curso'] or '').lower():
+                    name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''} {r['funcion_curso'] or ''}"
+                    if match_rut_or_text(q, q_clean, r['rut'], name_str):
                         results.append({
                             "RUT": r['rut'],
                             "Nombres": r['nombres'],
@@ -623,6 +637,7 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
             # ── 6. LISTADO DE ENTREVISTAS ──
             elif path == '/api/entrevistas':
                 q = query.get('q', [''])[0].strip().lower()
+                q_clean = clean_rut_str(q)
                 estado = query.get('estado', [''])[0].strip()
                 
                 sql = "SELECT * FROM entrevistas WHERE 1=1"
@@ -635,8 +650,8 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 results = []
                 for row in cursor.fetchall():
                     r = dict(row)
-                    name_str = f"{r['rut'] or ''} {r['nombre'] or ''} {r['resp'] or ''} {r['id'] or ''}".lower()
-                    if not q or q in name_str:
+                    name_str = f"{r['nombre'] or ''} {r['resp'] or ''} {r['id'] or ''}"
+                    if match_rut_or_text(q, q_clean, r['rut'], name_str):
                         results.append(r)
                 self.send_json(results)
 
