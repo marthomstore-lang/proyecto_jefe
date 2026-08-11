@@ -2,12 +2,18 @@ import os
 import json
 import sqlite3
 import mimetypes
+import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
 from dotenv import load_dotenv
 
 # Cargar variables de entorno del archivo .env si existe
 load_dotenv()
+
+def clean_rut_str(s):
+    if not s:
+        return ""
+    return re.sub(r'[^0-9kK]', '', str(s)).upper()
 
 PORT = 8080
 DB_PATH = os.path.join(os.path.dirname(__file__), 'campanario.db')
@@ -371,9 +377,84 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                     "retirados": ret
                 })
 
-            # ── 2. BUSCADOR GLOBAL ──
+            # ── 2. BUSCADOR GLOBAL Y PERSONA INDIVIDUAL ──
+            elif path == '/api/persona':
+                rut_param = query.get('rut', [''])[0].strip()
+                target_clean = clean_rut_str(rut_param)
+                found_person = None
+                
+                if target_clean:
+                    # 1. Estudiantes
+                    cursor.execute("SELECT * FROM estudiantes")
+                    for row in cursor.fetchall():
+                        r = dict(row)
+                        if clean_rut_str(r['rut']) == target_clean:
+                            found_person = {
+                                "RUT": r['rut'],
+                                "Nombres": r['nombres'],
+                                "Apellido Paterno": r['apellido_paterno'],
+                                "Apellido Materno": r['apellido_materno'],
+                                "Cargo": "Estudiante",
+                                "Curso": r['curso'] or 'No asignado',
+                                "Función/curso": r['curso'] or 'No asignado',
+                                "Profesor Jefe": r['profesor_jefe'] or 'No asignado',
+                                "Profesor de Asignatura": r['profesor_asignatura'] or 'No asignado',
+                                "Profesor PIE": r['profesor_pie'] or 'No asignado',
+                                "Fecha de Nacimiento": r['fecha_nacimiento'],
+                                "Estado Matrícula": r['estado']
+                            }
+                            break
+                            
+                    if not found_person:
+                        # 2. Docentes
+                        cursor.execute("SELECT * FROM docentes")
+                        for row in cursor.fetchall():
+                            r = dict(row)
+                            if clean_rut_str(r['rut']) == target_clean:
+                                found_person = {
+                                    "RUT": r['rut'],
+                                    "Nombres": r['nombres'],
+                                    "Apellido Paterno": r['apellido_paterno'],
+                                    "Apellido Materno": r['apellido_materno'],
+                                    "Cargo": "Docente",
+                                    "Curso": r['funcion_curso'] or 'Docente de Aula',
+                                    "Función/curso": r['funcion_curso'] or 'Docente de Aula',
+                                    "Asignatura": r['asignatura'] or 'General',
+                                    "Profesor Jefe": "No aplica",
+                                    "Profesor de Asignatura": r['asignatura'] or 'General',
+                                    "Profesor PIE": "No aplica"
+                                }
+                                break
+
+                    if not found_person:
+                        # 3. Asistentes
+                        cursor.execute("SELECT * FROM asistentes")
+                        for row in cursor.fetchall():
+                            r = dict(row)
+                            if clean_rut_str(r['rut']) == target_clean:
+                                found_person = {
+                                    "RUT": r['rut'],
+                                    "Nombres": r['nombres'],
+                                    "Apellido Paterno": r['apellido_paterno'],
+                                    "Apellido Materno": r['apellido_materno'],
+                                    "Cargo": "Asistente de la educación",
+                                    "Curso": r['funcion_curso'] or 'Asistente de la educación',
+                                    "Función/curso": r['funcion_curso'] or 'Asistente de la educación',
+                                    "Asignatura": "No aplica",
+                                    "Profesor Jefe": "No aplica",
+                                    "Profesor de Asignatura": "No aplica",
+                                    "Profesor PIE": "No aplica"
+                                }
+                                break
+
+                if found_person:
+                    self.send_json(found_person)
+                else:
+                    self.send_json({"error": "Persona no encontrada"}, status=404)
+
             elif path == '/api/personas/buscar':
                 q = query.get('q', [''])[0].strip().lower()
+                q_clean = clean_rut_str(q)
                 filtro = query.get('filtro', [''])[0].strip()
                 
                 results = []
@@ -384,18 +465,19 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                     for row in cursor.fetchall():
                         r = dict(row)
                         name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''}".lower()
-                        if not q or q in (r['rut'] or '').lower() or q in name_str:
+                        rut_clean = clean_rut_str(r['rut'])
+                        if not q or (q_clean and q_clean in rut_clean) or (q in (r['rut'] or '').lower()) or (q in name_str):
                             results.append({
                                 "RUT": r['rut'],
                                 "Nombres": r['nombres'],
                                 "Apellido Paterno": r['apellido_paterno'],
                                 "Apellido Materno": r['apellido_materno'],
                                 "Cargo": "Estudiante",
-                                "Curso": r['curso'],
-                                "Función/curso": r['curso'],
-                                "Profesor Jefe": r['profesor_jefe'],
-                                "Profesor de Asignatura": r['profesor_asignatura'],
-                                "Profesor PIE": r['profesor_pie'],
+                                "Curso": r['curso'] or 'No asignado',
+                                "Función/curso": r['curso'] or 'No asignado',
+                                "Profesor Jefe": r['profesor_jefe'] or 'No asignado',
+                                "Profesor de Asignatura": r['profesor_asignatura'] or 'No asignado',
+                                "Profesor PIE": r['profesor_pie'] or 'No asignado',
                                 "Fecha de Nacimiento": r['fecha_nacimiento'],
                                 "Estado Matrícula": r['estado'],
                                 "Anotaciones": r.get('anotaciones_count', 0)
@@ -407,16 +489,17 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                     for row in cursor.fetchall():
                         r = dict(row)
                         name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''}".lower()
-                        if not q or q in (r['rut'] or '').lower() or q in name_str or q in (r['asignatura'] or '').lower():
+                        rut_clean = clean_rut_str(r['rut'])
+                        if not q or (q_clean and q_clean in rut_clean) or (q in (r['rut'] or '').lower()) or (q in name_str) or (q in (r['asignatura'] or '').lower()):
                             results.append({
                                 "RUT": r['rut'],
                                 "Nombres": r['nombres'],
                                 "Apellido Paterno": r['apellido_paterno'],
                                 "Apellido Materno": r['apellido_materno'],
                                 "Cargo": "Docente",
-                                "Curso": r['funcion_curso'],
-                                "Función/curso": r['funcion_curso'],
-                                "Asignatura": r['asignatura'],
+                                "Curso": r['funcion_curso'] or 'Docente de Aula',
+                                "Función/curso": r['funcion_curso'] or 'Docente de Aula',
+                                "Asignatura": r['asignatura'] or 'General',
                                 "Horas Contrato": r['horas_contrato'],
                                 "Estado/Idoneidad": r['idoneidad']
                             })
@@ -427,15 +510,16 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                     for row in cursor.fetchall():
                         r = dict(row)
                         name_str = f"{r['nombres'] or ''} {r['apellido_paterno'] or ''} {r['apellido_materno'] or ''}".lower()
-                        if not q or q in (r['rut'] or '').lower() or q in name_str or q in (r['funcion_curso'] or '').lower():
+                        rut_clean = clean_rut_str(r['rut'])
+                        if not q or (q_clean and q_clean in rut_clean) or (q in (r['rut'] or '').lower()) or (q in name_str) or (q in (r['funcion_curso'] or '').lower()):
                             results.append({
                                 "RUT": r['rut'],
                                 "Nombres": r['nombres'],
                                 "Apellido Paterno": r['apellido_paterno'],
                                 "Apellido Materno": r['apellido_materno'],
                                 "Cargo": "Asistente de la educación",
-                                "Curso": r['funcion_curso'],
-                                "Función/curso": r['funcion_curso'],
+                                "Curso": r['funcion_curso'] or 'Asistente de la educación',
+                                "Función/curso": r['funcion_curso'] or 'Asistente de la educación',
                                 "Horas Contrato": r['horas_contrato'],
                                 "Estado/Idoneidad": r['idoneidad']
                             })
