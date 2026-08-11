@@ -1506,7 +1506,7 @@ async function autocompletarEnt() {
       await cargarHistorialCita(rut);
       toast(`✅ Datos autocompletados: ${nom}`);
     } else {
-      toast('⚠️ RUT no encontrado en la base de datos');
+      toast('ℹ️ RUT no registrado en la nómina. Puede ingresar los datos manualmente.');
     }
   } catch(e) {
     console.error("Error autocompleting:", e);
