@@ -625,12 +625,14 @@ function goTo(page) {
   }
 }
 
-// ══ TOAST ══
 function toast(msg) {
   const t = document.getElementById('toast');
-  t.innerHTML = `<span>ℹ️</span> ${msg}`;
+  if (!t) return;
+  const startsWithEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}ℹ️⚠️❌✅👤🗑️💾🔑📁✏️📚]/u.test(msg.trim());
+  t.innerHTML = startsWithEmoji ? msg : `<span>ℹ️</span> ${msg}`;
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
+  if (t._timeout) clearTimeout(t._timeout);
+  t._timeout = setTimeout(() => t.classList.remove('show'), 3000);
 }
 
 // ══ STATS & SVG GAUGES (SERVER BACKEND) ══
