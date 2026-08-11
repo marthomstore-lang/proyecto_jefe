@@ -1048,25 +1048,28 @@ function cerrarLookup() {
   document.getElementById('modal-lookup').classList.remove('open');
 }
 
+let currentLookupRows = [];
+
 async function filtrarLookup() {
   const qVal = txt(document.getElementById('l-q').value).toLowerCase();
   const f = document.getElementById('l-filtro').value;
   try {
     const res = await fetch(`/api/personas/buscar?q=${encodeURIComponent(qVal)}&filtro=${encodeURIComponent(f)}`);
     const rows = await res.json();
+    currentLookupRows = rows || [];
     
     const tbody = document.querySelector('#tbl-lookup tbody');
-    if (!rows || rows.length === 0) {
+    if (!currentLookupRows || currentLookupRows.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 28px; color:var(--text-muted)">No se encontraron coincidencias de personas.</td></tr>';
       return;
     }
     
-    tbody.innerHTML = rows.map(p => {
-      const rawRut = p.RUT || p.Rut || '';
+    tbody.innerHTML = currentLookupRows.map((p, idx) => {
+      const rawRut = p.RUT || p.Rut || p.rut || '';
       const formattedRut = formatearRut(rawRut) || rawRut;
-      const name = [p.Nombres, p['Apellido Paterno'] || p['Apellido paterno'] || '', p['Apellido Materno'] || p['Apellido materno'] || ''].join(' ').trim().replace(/\s+/g,' ');
-      const est = p.Cargo || p.Perfil || 'Estudiante';
-      const c = p.Curso || p['Función/curso'] || '-';
+      const name = [p.Nombres || p.nombres || '', p['Apellido Paterno'] || p['Apellido paterno'] || p.apellido_paterno || '', p['Apellido Materno'] || p['Apellido materno'] || p.apellido_materno || ''].filter(Boolean).join(' ').trim().replace(/\s+/g,' ');
+      const est = p.Cargo || p.cargo || p.Perfil || 'Estudiante';
+      const c = p.Curso || p.curso || p['Función/curso'] || p.funcion_curso || '-';
       
       let badgeStyle = 'background: rgba(16, 185, 129, 0.12); color: #047857; border: 1px solid rgba(16, 185, 129, 0.25);';
       if (est.toLowerCase().includes('estudiante')) {
@@ -1093,7 +1096,7 @@ async function filtrarLookup() {
           ${esc(c)}
         </td>
         <td style="padding: 10px 14px; text-align: center; white-space: nowrap;">
-          <button type="button" class="btn btn-sm btn-primary" onclick="seleccionarPersona('${esc(rawRut)}')" style="padding: 6px 14px; font-size: 12px; font-weight: 600; white-space: nowrap;">
+          <button type="button" class="btn btn-sm btn-primary" onclick="seleccionarPersonaIndex(${idx})" style="padding: 6px 14px; font-size: 12px; font-weight: 600; white-space: nowrap;">
             Seleccionar ➔
           </button>
         </td>
@@ -1104,33 +1107,60 @@ async function filtrarLookup() {
   }
 }
 
-function seleccionarPersona(rut) {
-  const formatted = formatearRut(rut) || rut;
+function seleccionarPersonaIndex(idx) {
+  const p = currentLookupRows[idx];
+  if (!p) return;
+  
+  const rawRut = p.RUT || p.Rut || p.rut || '';
+  const formatted = formatearRut(rawRut) || rawRut;
   
   if (typeof lookupCallback === 'function') {
     const cb = lookupCallback;
     lookupCallback = null;
     cerrarLookup();
-    
-    fetch(`/api/personas/buscar?q=${encodeURIComponent(rut)}`)
-      .then(r => r.json())
-      .then(rows => {
-        const cleanTarget = rut.replace(/[^0-9kK]/g, '').toUpperCase();
-        const p = (rows || []).find(x => (x.RUT || x.Rut || '').replace(/[^0-9kK]/g, '').toUpperCase() === cleanTarget) || { RUT: formatted };
-        cb(p);
-        toast(`👤 Persona seleccionada: ${p.Nombres || formatted}`);
-      })
-      .catch(() => {
-        cb({ RUT: formatted });
-        toast(`👤 Persona seleccionada: ${formatted}`);
-      });
+    cb(p);
+    toast(`👤 Persona seleccionada: ${p.Nombres || p.nombres || formatted}`);
     return;
   }
 
+  // Rellenar de inmediato todos los campos del formulario de entrevista
+  const nom = [
+    p.Nombres || p.nombres || '',
+    p['Apellido Paterno'] || p['Apellido paterno'] || p.apellido_paterno || '',
+    p['Apellido Materno'] || p['Apellido materno'] || p.apellido_materno || ''
+  ].filter(Boolean).join(' ').trim().replace(/\s+/g, ' ');
+
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  };
+
+  setVal('e-rut', formatted);
+  setVal('e-nombre', nom);
+  setVal('e-cargo', txt(p.Cargo || p.cargo || p.Perfil || 'Estudiante'));
+  setVal('e-curso', txt(p.Curso || p.curso || p['Función/curso'] || p.funcion_curso || 'No asignado'));
+  setVal('e-jefe', txt(p['Profesor Jefe'] || p.profesor_jefe || p['Profesor jefe (curso)'] || 'No asignado'));
+  setVal('e-asig', txt(p['Asignatura'] || p.asignatura || p['Profesor de Asignatura'] || p.profesor_asignatura || 'No aplica'));
+  setVal('e-pie', txt(p['Profesor PIE'] || p.profesor_pie || 'No aplica'));
+
+  cerrarLookup();
+  cargarHistorialCita(rawRut);
+  toast(`👤 Persona seleccionada: ${nom}`);
+}
+
+function seleccionarPersona(rut) {
+  const cleanTarget = (rut || '').replace(/[^0-9kK]/g, '').toUpperCase();
+  const idx = currentLookupRows.findIndex(x => (x.RUT || x.Rut || x.rut || '').replace(/[^0-9kK]/g, '').toUpperCase() === cleanTarget);
+  if (idx !== -1) {
+    seleccionarPersonaIndex(idx);
+    return;
+  }
+  
+  // Fallback si no estaba en la lista visible
+  const formatted = formatearRut(rut) || rut;
   document.getElementById('e-rut').value = formatted;
   autocompletarEnt();
   cerrarLookup();
-  toast('👤 Persona seleccionada');
 }
 
 // ══ EDIT PERSON MODAL ══
