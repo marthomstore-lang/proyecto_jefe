@@ -2629,6 +2629,113 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
+// ══ MI PERFIL Y EDICIÓN DE DATOS DE USUARIO ══
+async function abrirModalMiPerfil() {
+  const activeUser = sessionStorage.getItem('campanario_user');
+  if (!activeUser) return;
+  
+  const modal = document.getElementById('modal-mi-perfil');
+  if (!modal) return;
+  
+  document.getElementById('mp-user').value = activeUser;
+  document.getElementById('mp-perfil').value = sessionStorage.getItem('campanario_perfil') || 'Entrevistador';
+  document.getElementById('mp-nombre').value = sessionStorage.getItem('campanario_nombre') || '';
+  document.getElementById('mp-password').value = '';
+  document.getElementById('mp-password-confirm').value = '';
+  
+  // Buscar datos completos (rut, etc.) en el listado de usuarios
+  try {
+    const res = await fetch('/api/usuarios');
+    const list = await res.json();
+    const myUserObj = list.find(u => u.username === activeUser);
+    if (myUserObj) {
+      if (myUserObj.nombre) document.getElementById('mp-nombre').value = myUserObj.nombre;
+      if (myUserObj.rut) document.getElementById('mp-rut').value = myUserObj.rut;
+    }
+  } catch(err) {
+    console.error("Error fetching user profile data:", err);
+  }
+  
+  modal.classList.add('open');
+}
+
+function cerrarModalMiPerfil() {
+  const modal = document.getElementById('modal-mi-perfil');
+  if (modal) modal.classList.remove('open');
+}
+
+async function guardarMiPerfil() {
+  const activeUser = sessionStorage.getItem('campanario_user');
+  const activePerfil = sessionStorage.getItem('campanario_perfil');
+  
+  const nombre = document.getElementById('mp-nombre').value.trim();
+  const rut = document.getElementById('mp-rut').value.trim();
+  const pass1 = document.getElementById('mp-password').value.trim();
+  const pass2 = document.getElementById('mp-password-confirm').value.trim();
+  
+  if (!nombre) {
+    toast("⚠️ El nombre completo es obligatorio");
+    return;
+  }
+  
+  if (pass1 || pass2) {
+    if (pass1 !== pass2) {
+      toast("❌ Las contraseñas no coinciden");
+      return;
+    }
+    if (pass1.length < 3) {
+      toast("⚠️ La contraseña debe tener al menos 3 caracteres");
+      return;
+    }
+  }
+  
+  // Mantener contraseña actual si no ingresó una nueva
+  let passwordToSave = pass1;
+  if (!passwordToSave) {
+    try {
+      const res = await fetch('/api/usuarios');
+      const list = await res.json();
+      const myUserObj = list.find(u => u.username === activeUser);
+      if (myUserObj && myUserObj.password) {
+        passwordToSave = myUserObj.password;
+      }
+    } catch(err) {}
+  }
+  
+  if (!passwordToSave) {
+    toast("⚠️ Ingrese una contraseña para actualizar el perfil");
+    return;
+  }
+  
+  const payload = {
+    username: activeUser,
+    nombre,
+    rut,
+    password: passwordToSave,
+    perfil: activePerfil
+  };
+  
+  try {
+    const res = await fetch('/api/usuarios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    if (result.success) {
+      toast("✅ Tus datos personales han sido actualizados con éxito");
+      sessionStorage.setItem('campanario_nombre', nombre);
+      aplicarPermisos(activePerfil);
+      cerrarModalMiPerfil();
+    } else {
+      toast("❌ Error al actualizar: " + (result.error || ''));
+    }
+  } catch(err) {
+    console.error("Error saving profile:", err);
+    toast("❌ Error de conexión al servidor");
+  }
+}
+
 // ══ GESTIÓN DE CONFIGURACIÓN (USUARIOS CRUD) ══
 let listaPersonalGlobal = [];
 async function renderConfiguracion() {
