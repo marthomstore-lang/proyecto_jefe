@@ -2101,6 +2101,24 @@
   </div>
 </div>
 
+<!-- MODAL SELECCIONAR ENTREVISTA DEL RUT -->
+<div class="modal-bg" id="modal-seleccionar-entrevista" style="z-index: 1150;">
+  <div class="modal" style="max-width: 650px; padding: 24px;">
+    <div class="modal-header">
+      <div class="modal-title" id="sel-ent-title">📋 Entrevistas Registradas</div>
+      <button type="button" class="modal-close" onclick="cerrarModalSeleccionarEntrevista()">✖</button>
+    </div>
+    <p style="color: var(--text-muted, #64748b); font-size: 13.5px; margin-bottom: 16px;" id="sel-ent-subtitle">
+      Seleccione la entrevista que desea revisar o edite/cree una nueva entrevista para este estudiante:
+    </p>
+    <div id="sel-ent-list-container" style="max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
+      <!-- Se cargará dinámicamente -->
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 14px; flex-wrap: wrap; gap: 10px;">
+      <button type="button" class="btn btn-secondary" onclick="cerrarModalSeleccionarEntrevista()">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="btn-nueva-entrevista-rut" onclick="crearNuevaEntrevistaDirecto()">➕ Registrar Nueva Entrevista</button>
+    </div>
+  </div>
 </div>
 
 <!-- MODAL AGREGAR ANOTACIÓN -->
@@ -2176,6 +2194,6 @@
   </div>
 </div>
 
-<script src="logic.js?v=4.5" defer></script>
+<script src="logic.js?v=4.6" defer></script>
 </body>
 </html>

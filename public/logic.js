@@ -1482,10 +1482,109 @@ function limpiarAdmin() {
 }
 
 // ══ ENTREVISTAS ══
+let currentRutSeleccionarEntrevista = null;
+
 async function entrevistar(rut) {
+  if (!rut) return;
+  
+  const formattedRut = formatearRut(rut);
+  const cleanRut = (formattedRut || rut).replace(/[^0-9kK]/g, '').toUpperCase();
+  
+  // Garantizar que la lista global de entrevistas esté cargada
+  if (!entrevistas || entrevistas.length === 0) {
+    try {
+      const res = await fetch('/api/entrevistas');
+      entrevistas = await res.json();
+    } catch(err) {
+      console.error("Error fetching interviews for entrevistar:", err);
+    }
+  }
+  
+  const currentUser = sessionStorage.getItem('campanario_user');
+  const userRole = sessionStorage.getItem('campanario_perfil');
+  const currentNombre = sessionStorage.getItem('campanario_nombre');
+  
+  // Filtrar entrevistas guardadas de este RUT visibles para el usuario
+  const matches = (entrevistas || []).filter(e => {
+    const eRutClean = (e.rut || '').replace(/[^0-9kK]/g, '').toUpperCase();
+    return eRutClean === cleanRut && esEntrevistaVisibleParaUsuario(e, currentUser, currentNombre, userRole);
+  });
+  
+  // CASO 1: No tiene entrevistas previas -> Abrir formulario para crear su primera entrevista
+  if (matches.length === 0) {
+    limpiarForm();
+    document.getElementById('e-rut').value = formattedRut || rut;
+    await autocompletarEnt();
+    goTo('nueva-entrevista');
+    return;
+  }
+  
+  // CASO 2: Tiene EXACTAMENTE 1 entrevista -> Abrir directamente esa entrevista para revisar/editar
+  if (matches.length === 1) {
+    const ent = matches[0];
+    cargarEntrevistaParaEditarDirecto(ent.id);
+    goTo('nueva-entrevista?edit=' + ent.id);
+    return;
+  }
+  
+  // CASO 3: Tiene MÚLTIPLES entrevistas (2+) -> Mostrar modal selector para elegir cuál revisar/editar
+  abrirModalSeleccionarEntrevista(formattedRut || rut, matches);
+}
+
+function abrirModalSeleccionarEntrevista(rut, list) {
+  currentRutSeleccionarEntrevista = rut;
+  const modal = document.getElementById('modal-seleccionar-entrevista');
+  if (!modal) return;
+  
+  const title = document.getElementById('sel-ent-title');
+  const subtitle = document.getElementById('sel-ent-subtitle');
+  const container = document.getElementById('sel-ent-list-container');
+  
+  const estudianteNombre = list[0]?.nombre || 'Estudiante / Persona con RUT ' + rut;
+  if (title) title.innerHTML = `📋 Entrevistas Registradas para <span style="color:var(--primary, #4f46e5);">${esc(estudianteNombre)}</span>`;
+  if (subtitle) subtitle.textContent = `Este estudiante posee ${list.length} entrevistas registradas en el sistema. Por favor seleccione cuál desea revisar, editar o imprima su ficha:`;
+  
+  // Ordenar de más reciente a más antigua por ID
+  list.sort((a, b) => (b.id || '').localeCompare(a.id || ''));
+  
+  container.innerHTML = list.map(e => `
+    <div class="card" style="border: 1px solid #cbd5e1; padding: 14px; margin: 0; box-shadow: none; display: flex; justify-content: space-between; align-items: center; border-radius: 8px; background: #ffffff; flex-wrap: wrap; gap: 10px;">
+      <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 240px;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <code style="background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 13px;">${esc(e.id)}</code>
+          <span style="font-size: 13px; font-weight: 600; color: #1e293b;">📅 ${esc(e.fecha || 'Sin fecha')} ${esc(e.hora || '')}</span>
+          <span class="badge ${estadoBadge(e.estado)}">${esc(e.estado)}</span>
+        </div>
+        <div style="font-size: 13px; color: #334155; margin-top: 2px;">
+          <strong>🎯 Objetivo:</strong> ${esc(e.objetivo || 'Sin objetivo')}
+        </div>
+        <div style="font-size: 11.5px; color: #64748b;">
+          👤 <strong>Responsable:</strong> ${esc(e.resp || 'Docente')} | 🏫 <strong>Curso:</strong> ${esc(e.curso || '---')}
+        </div>
+      </div>
+      <div style="display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap;">
+        <button type="button" class="btn btn-sm btn-secondary" onclick="cerrarModalSeleccionarEntrevista(); verReporte('${esc(e.id)}')" style="font-size:12px; padding: 6px 12px;">📄 Ver Ficha</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="cerrarModalSeleccionarEntrevista(); cargarEntrevistaParaEditarDirecto('${esc(e.id)}'); goTo('nueva-entrevista?edit=${esc(e.id)}');" style="font-size:12px; padding: 6px 14px; font-weight:700; background: #4f46e5; border-color: #4f46e5;">✏️ Abrir / Editar</button>
+      </div>
+    </div>
+  `).join('');
+  
+  modal.classList.add('open');
+}
+
+function cerrarModalSeleccionarEntrevista() {
+  const modal = document.getElementById('modal-seleccionar-entrevista');
+  if (modal) modal.classList.remove('open');
+}
+
+async function crearNuevaEntrevistaDirecto() {
+  const rut = currentRutSeleccionarEntrevista;
+  cerrarModalSeleccionarEntrevista();
   limpiarForm();
-  document.getElementById('e-rut').value = rut;
-  await autocompletarEnt();
+  if (rut) {
+    document.getElementById('e-rut').value = rut;
+    await autocompletarEnt();
+  }
   goTo('nueva-entrevista');
 }
 
