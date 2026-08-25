@@ -992,19 +992,25 @@
       </div>
     </div>
     
-    <div class="form-grid" style="margin-top:16px">
+    <!-- OBJETIVO Y ACUERDOS (2 COLUMNAS) -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 18px;">
       <div class="form-group">
-        <label>Objetivo de la entrevista</label>
-        <textarea id="e-objetivo" rows="4" placeholder="Describa el propósito principal del encuentro académico/conductual..."></textarea>
+        <label style="font-weight: 700; font-size: 13.5px; color: var(--text-primary);">🎯 Objetivo de la entrevista</label>
+        <textarea id="e-objetivo" class="textarea-md" rows="6" placeholder="Describa el propósito principal del encuentro académico/conductual..." oninput="autoExpandTextarea(this)"></textarea>
       </div>
       <div class="form-group">
-        <label>Motivo / antecedentes</label>
-        <textarea id="e-motivo" rows="4" placeholder="Detalle antecedentes previos o el caso específico a analizar..."></textarea>
+        <label style="font-weight: 700; font-size: 13.5px; color: var(--text-primary);">✅ Acuerdos / compromisos establecidos</label>
+        <textarea id="e-acuerdos" class="textarea-md" rows="6" placeholder="Escriba los compromisos tomados por cada una de las partes..." oninput="autoExpandTextarea(this)"></textarea>
       </div>
-      <div class="form-group">
-        <label>Acuerdos / compromisos establecidos</label>
-        <textarea id="e-acuerdos" rows="4" placeholder="Escriba los compromisos tomados por cada una de las partes..."></textarea>
-      </div>
+    </div>
+    
+    <!-- MOTIVO / ANTECEDENTES (ANCHO COMPLETO - EXPANDIDO) -->
+    <div class="form-group" style="margin-top: 18px;">
+      <label style="font-weight: 700; font-size: 14px; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between;">
+        <span>📝 Motivo / Antecedentes y Relato de los Hechos</span>
+        <span style="font-size: 12px; font-weight: normal; color: var(--text-secondary);">Recuadro amplio para narrativa extensa</span>
+      </label>
+      <textarea id="e-motivo" class="textarea-lg" rows="10" placeholder="Detalle exhaustivamente los antecedentes previos, los hechos ocurridos, la situación planteada por las partes o el relato completo..." oninput="autoExpandTextarea(this)"></textarea>
     </div>
     
     <!-- SECCIÓN PARTICIPANTES ADICIONALES Y DECLARACIONES / RELATOS -->
@@ -1030,9 +1036,10 @@
       </div>
     </div>
     
-    <div class="form-group" style="margin-top:16px">
-      <label>Observaciones generales</label>
-      <textarea id="e-obs" rows="3" placeholder="Información complementaria, citaciones adicionales o derivaciones..."></textarea>
+    <!-- OBSERVACIONES GENERALES (ANCHO COMPLETO - EXPANDIDO) -->
+    <div class="form-group" style="margin-top: 18px;">
+      <label style="font-weight: 700; font-size: 14px; color: var(--text-primary);">💬 Observaciones Generales y Conclusiones</label>
+      <textarea id="e-obs" class="textarea-lg" rows="8" placeholder="Información complementaria, citaciones adicionales, derivaciones o acuerdos de seguimiento..." oninput="autoExpandTextarea(this)"></textarea>
     </div>
     
     <div class="btn-row" id="ent-btn-row">
@@ -2169,6 +2176,6 @@
   </div>
 </div>
 
-<script src="logic.js?v=3.7" defer></script>
+<script src="logic.js?v=3.8" defer></script>
 </body>
 </html>

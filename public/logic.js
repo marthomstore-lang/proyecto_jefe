@@ -70,6 +70,12 @@ async function subirArchivoADrive(input) {
   reader.readAsDataURL(file);
 }
 
+function autoExpandTextarea(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.max(el.scrollHeight + 6, 120) + 'px';
+}
+
 const originalFetch = window.fetch;
 window.fetch = async function(url, options = {}) {
   if (typeof url === 'string' && url.startsWith('/api/')) {
@@ -2118,6 +2124,13 @@ async function cargarEntrevistaParaEditarDirecto(id) {
     participantesRelatosForm = [];
   }
   if (typeof renderParticipantesRelatosForm === 'function') renderParticipantesRelatosForm();
+  
+  setTimeout(() => {
+    ['e-objetivo', 'e-motivo', 'e-acuerdos', 'e-obs'].forEach(fieldId => {
+      const fieldEl = document.getElementById(fieldId);
+      if (fieldEl) autoExpandTextarea(fieldEl);
+    });
+  }, 50);
   
   if (meta.creador) {
     document.getElementById('e-privacidad').value = 'Confidencial';
@@ -5910,7 +5923,7 @@ function renderParticipantesRelatosForm() {
 
         <div>
           <label style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 3px; display: block;">Declaración, Aporte o Relato de la Persona:</label>
-          <textarea rows="2" onchange="participantesRelatosForm[${idx}].relato = this.value" placeholder="Escriba la declaración, testimonio o relato expresado por esta persona durante la entrevista..." style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; outline: none; resize: vertical;">${esc(p.relato)}</textarea>
+          <textarea class="textarea-md" rows="5" oninput="participantesRelatosForm[${idx}].relato = this.value; autoExpandTextarea(this);" onchange="participantesRelatosForm[${idx}].relato = this.value" placeholder="Escriba la declaración, testimonio o relato expresado por esta persona durante la entrevista..." style="width: 100%; padding: 10px 14px; font-size: 14px; border: 1px solid var(--border); border-radius: 6px; outline: none; resize: vertical;">${esc(p.relato)}</textarea>
         </div>
       </div>
     `;
