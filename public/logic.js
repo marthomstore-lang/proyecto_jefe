@@ -2443,6 +2443,8 @@ async function login() {
       } catch (e) {}
       
       aplicarPermisos(data.perfil);
+      window.location.hash = 'inicio';
+      goTo('inicio');
       
       setTimeout(() => {
         loadAllData();
@@ -2751,13 +2753,16 @@ setTimeout(() => {
   bindRutMasks();
   verificarNotificaciones();
   
-  // Navegar a la página inicial cargada en el hash
-  const initialPage = window.location.hash.slice(1) || 'inicio';
+  // Navegar a la página inicial ('inicio' por defecto al ingresar por primera vez)
+  if (!window.location.hash || window.location.hash === '#' || window.location.hash === '#/') {
+    window.location.hash = 'inicio';
+  }
+  const initialPage = window.location.hash.slice(1).split('?')[0] || 'inicio';
   goTo(initialPage);
 }, 250);
 
 window.addEventListener('hashchange', () => {
-  const hash = window.location.hash.slice(1) || 'inicio';
+  const hash = window.location.hash.slice(1).split('?')[0] || 'inicio';
   goTo(hash);
 });
 
