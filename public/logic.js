@@ -3468,54 +3468,59 @@ async function abrirModalNotificaciones() {
       return;
     }
     
-    // Resolver metadatos si no vienen del servidor (ej: en modo SQLite sin sincronización)
     for (const item of list) {
-      if (!item.estudiante_nombre) {
-        let ent = entrevistas.find(x => x.id === item.entrevista_id);
-        if (!ent) {
-          try {
-            const headers = {
-              'apikey': SUPABASE_ANON_KEY,
-              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-            };
-            const res = await originalFetch(`${SUPABASE_URL}/rest/v1/entrevistas?id=eq.${encodeURIComponent(item.entrevista_id)}`, { headers });
-            const data = await res.json();
-            if (data && data.length > 0) {
-              ent = data[0];
-            }
-          } catch(err) {
-            console.error("Error resolving metadata from Supabase:", err);
+      let ent = entrevistas.find(x => x.id === item.entrevista_id);
+      if (!ent) {
+        try {
+          const headers = {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+          };
+          const res = await originalFetch(`${SUPABASE_URL}/rest/v1/entrevistas?id=eq.${encodeURIComponent(item.entrevista_id)}`, { headers });
+          const data = await res.json();
+          if (data && data.length > 0) {
+            ent = data[0];
           }
+        } catch(err) {
+          console.error("Error resolving metadata from Supabase:", err);
         }
-        if (ent) {
-          item.estudiante_nombre = ent.nombre;
-          item.objetivo = ent.objetivo;
-          item.fecha = ent.fecha;
-          item.entrevistador = ent.resp;
-        } else {
-          item.estudiante_nombre = "Cita " + item.entrevista_id;
-          item.objetivo = "Aporte a entrevista pendiente";
-          item.fecha = "---";
-          item.entrevistador = "Docente responsable";
-        }
+      }
+      if (ent) {
+        item.estudiante_nombre = ent.nombre || item.estudiante_nombre || 'Estudiante no registrado';
+        item.objetivo = ent.objetivo || item.objetivo || 'Sin objetivo';
+        item.fecha = ent.fecha || item.fecha || '---';
+        item.entrevistador = ent.resp || item.entrevistador || 'Docente Responsable';
+      } else if (!item.estudiante_nombre) {
+        item.estudiante_nombre = "Entrevista " + item.entrevista_id;
+        item.objetivo = "Aporte a entrevista pendiente";
+        item.fecha = "---";
+        item.entrevistador = "Docente responsable";
       }
     }
     
     container.innerHTML = list.map(item => `
-      <div class="card nav-notif-item" style="border: 1px solid var(--border, #e2e8f0); padding: 16px; margin: 0; box-shadow: none; display: flex; flex-direction: column; gap: 8px; cursor: pointer; transition: all 0.2s;" onclick="irAEntrevistaNotif('${esc(item.entrevista_id)}')">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 4px;">
+      <div class="card nav-notif-item" style="border: 1px solid #7dd3fc; background: #fff; padding: 16px; margin: 0; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 10px; border-radius: 8px; cursor: pointer; transition: all 0.2s;" onclick="irAEntrevistaNotif('${esc(item.entrevista_id)}')">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
           <div>
-            <strong style="font-size: 14px; color: var(--text-primary);">${esc(item.estudiante_nombre)}</strong>
-            <div style="font-size: 11px; color: var(--text-muted);">Invitación de: ${esc(item.entrevistador)} el ${esc(item.fecha)}</div>
+            <div style="font-size: 11px; font-weight: 700; color: #0369a1; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px;">
+              🎓 Estudiante Entrevistado:
+            </div>
+            <strong style="font-size: 15px; color: #0f172a; font-weight: 700; display: block;">${esc(item.estudiante_nombre)}</strong>
+            <div style="font-size: 12px; color: #64748b; margin-top: 3px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span>📋 <strong>ID:</strong> <code style="background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px; font-weight:bold;">${esc(item.entrevista_id)}</code></span>
+              <span>👤 <strong>Invitado por:</strong> ${esc(item.entrevistador)}</span>
+              <span>📅 ${esc(item.fecha)}</span>
+            </div>
           </div>
-          <span class="badge badge-amarillo" style="font-size: 11px; background: rgba(245, 158, 11, 0.1); color: #f59e0b; padding: 2px 8px; border-radius: 999px;">Pendiente</span>
+          <span class="badge badge-amarillo" style="font-size: 11.5px; background: #fef3c7; color: #d97706; padding: 4px 10px; border-radius: 999px; font-weight: 700;">Pendiente</span>
         </div>
-        <p style="font-size: 13px; margin: 0; color: var(--text-secondary); line-height: 1.4;">
-          <strong style="font-size:11px; text-transform:uppercase; color:var(--text-muted)">Objetivo:</strong> ${esc(item.objetivo)}
-        </p>
+        <div style="background: #f8fafc; padding: 10px 12px; border-radius: 6px; border-left: 3px solid #0284c7; margin-top: 2px;">
+          <strong style="font-size:11px; text-transform:uppercase; color:#0369a1; display:block; margin-bottom: 2px;">🎯 Objetivo de la Entrevista:</strong>
+          <span style="font-size: 13px; color: #334155; line-height: 1.4;">${esc(item.objetivo)}</span>
+        </div>
         <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px;">
-          <button class="btn btn-sm btn-secondary" style="padding: 6px 12px; font-size:12px;" onclick="event.stopPropagation(); descartarNotificacion('${esc(item.entrevista_id)}')">Descartar</button>
-          <button class="btn btn-sm btn-primary" style="padding: 6px 16px; font-size:12px;">📄 Ir a la Entrevista</button>
+          <button type="button" class="btn btn-sm btn-secondary" style="padding: 6px 12px; font-size:12px;" onclick="event.stopPropagation(); descartarNotificacion('${esc(item.entrevista_id)}')">Descartar</button>
+          <button type="button" class="btn btn-sm btn-primary" style="padding: 6px 16px; font-size:12px; font-weight: 700; background: #0284c7; border-color: #0284c7;">📄 Abrir Ficha de Entrevista (${esc(item.entrevista_id)})</button>
         </div>
       </div>
     `).join('');
