@@ -1909,6 +1909,12 @@ function esEntrevistaVisibleParaUsuario(e, currentUser, currentNombre, userRole)
     return true;
   }
   
+  // Las entrevistas institucionales no confidenciales (sin tag confidencial) son visibles para revisión
+  const meta = parseObsMetadata(e.obs || '');
+  if (!meta.creador) {
+    return true;
+  }
+  
   if (!currentUser) return true;
   
   const uLower = (currentUser || '').trim().toLowerCase();
@@ -1921,7 +1927,6 @@ function esEntrevistaVisibleParaUsuario(e, currentUser, currentNombre, userRole)
   }
   
   // 2. Es el creador/autor de la entrevista
-  const meta = parseObsMetadata(e.obs || '');
   if (meta.creador && (meta.creador.trim().toLowerCase() === uLower || meta.creador.trim().toLowerCase() === nLower)) {
     return true;
   }
