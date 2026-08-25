@@ -5916,6 +5916,74 @@ function renderParticipantesRelatosForm() {
     `;
     cont.appendChild(card);
   });
+
+  const bottomBar = document.createElement('div');
+  bottomBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 8px; flex-wrap: wrap; gap: 8px;';
+  bottomBar.innerHTML = `
+    <button type="button" class="btn btn-sm btn-secondary" onclick="agregarParticipanteRelatoForm()" style="font-size: 12px; font-weight: 700;">
+      + Agregar Otro Participante / Relato
+    </button>
+    <button type="button" class="btn btn-sm btn-success" onclick="guardarParticipantesRelatosSolo()" style="font-size: 12px; font-weight: 700; background: #059669; border-color: #059669;">
+      💾 Guardar Todos los Participantes y Relatos
+    </button>
+  `;
+  cont.appendChild(bottomBar);
+}
+
+async function guardarParticipantesRelatosSolo() {
+  if (!editandoEntrevistaId) {
+    const rut = document.getElementById('e-rut').value.trim();
+    if (!rut) {
+      toast("⚠️ Ingrese el RUT del entrevistado antes de guardar los participantes");
+      return;
+    }
+    toast("💾 Guardando entrevista con los participantes y relatos...");
+    await guardarEntrevista();
+    return;
+  }
+
+  try {
+    const originalEnt = entrevistas.find(x => x.id === editandoEntrevistaId);
+    const jsonParts = JSON.stringify(typeof participantesRelatosForm !== 'undefined' ? participantesRelatosForm : []);
+    
+    const payload = {
+      ...(originalEnt || {}),
+      id: editandoEntrevistaId,
+      rut: document.getElementById('e-rut').value,
+      nombre: document.getElementById('e-nombre').value,
+      cargo: document.getElementById('e-cargo').value,
+      curso: document.getElementById('e-curso').value,
+      jefe: document.getElementById('e-jefe').value,
+      asig: document.getElementById('e-asig').value,
+      pie: document.getElementById('e-pie').value,
+      fecha: document.getElementById('e-fecha').value,
+      hora: document.getElementById('e-hora').value,
+      resp: document.getElementById('e-resp').value,
+      estado: document.getElementById('e-estado').value,
+      seguimiento: document.getElementById('e-seguimiento').value,
+      objetivo: document.getElementById('e-objetivo').value,
+      motivo: document.getElementById('e-motivo').value,
+      acuerdos: document.getElementById('e-acuerdos').value,
+      obs: document.getElementById('e-obs').value,
+      participantes_relatos: jsonParts
+    };
+
+    const res = await fetch('/api/entrevistas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    if (result.success) {
+      if (originalEnt) originalEnt.participantes_relatos = jsonParts;
+      toast(`💾 ${participantesRelatosForm.length} participante(s) y relato(s) guardado(s) exitosamente`);
+    } else {
+      toast(`❌ Error al guardar participantes: ${result.error}`);
+    }
+  } catch (err) {
+    console.error("Error al guardar participantes:", err);
+    toast("❌ Error de red al guardar participantes");
+  }
 }
 
 // ══════════════ RENDERING HISTORIAL AGRUPADO (CURSO / ESTAMENTO) ══════════════
