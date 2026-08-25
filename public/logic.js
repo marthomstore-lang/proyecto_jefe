@@ -1786,24 +1786,30 @@ function parseObsMetadata(obsText) {
 }
 
 function llenarReporte(e) {
-  document.getElementById('r-id').textContent = e.id || '';
-  document.getElementById('r-fecha').textContent = txt(e.fecha) + ' ' + txt(e.hora);
-  document.getElementById('r-rut').textContent = e.rut || '';
-  document.getElementById('r-cargo').textContent = e.cargo || '';
-  document.getElementById('r-nombre').textContent = e.nombre || '';
-  document.getElementById('r-curso').textContent = e.curso || '';
-  document.getElementById('r-jefe').textContent = e.jefe || '';
-  document.getElementById('r-asig').textContent = e.asig || '';
-  document.getElementById('r-pie').textContent = e.pie || '';
-  document.getElementById('r-resp').textContent = e.resp || '';
-  document.getElementById('r-obj').textContent = e.objetivo || '';
-  document.getElementById('r-mot').textContent = e.motivo || '';
-  document.getElementById('r-acu').textContent = e.acuerdos || '';
-  document.getElementById('r-seg').textContent = e.seguimiento || 'No fijado';
-  document.getElementById('r-estado').textContent = e.estado || '';
+  if (!e) return;
+  const setEl = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val || '';
+  };
+
+  setEl('r-id', e.id);
+  setEl('r-fecha', (txt(e.fecha) + ' ' + txt(e.hora)).trim());
+  setEl('r-rut', e.rut);
+  setEl('r-cargo', e.cargo);
+  setEl('r-nombre', e.nombre);
+  setEl('r-curso', e.curso);
+  setEl('r-jefe', e.jefe);
+  setEl('r-asig', e.asig);
+  setEl('r-pie', e.pie);
+  setEl('r-resp', e.resp);
+  setEl('r-obj', e.objetivo);
+  setEl('r-mot', e.motivo);
+  setEl('r-acu', e.acuerdos);
+  setEl('r-seg', e.seguimiento || 'No fijado');
+  setEl('r-estado', e.estado);
   
-  const meta = parseObsMetadata(e.obs);
-  document.getElementById('r-obs').textContent = meta.obs;
+  const meta = parseObsMetadata(e.obs || '');
+  setEl('r-obs', meta.obs);
   
   // Handle documentation / attachment link
   const adjunto = e.adjunto || meta.adjunto;
@@ -3226,18 +3232,21 @@ function imprimirReporteIndividual(id) {
 }
 
 async function cargarReporteDesdeHash(id, print) {
-  let e = entrevistas.find(x => x.id === id);
+  if (!id) return;
+  const cleanId = String(id).trim();
+  
+  let e = entrevistas.find(x => x.id && x.id.toUpperCase() === cleanId.toUpperCase());
   if (!e) {
     try {
       const res = await fetch(`/api/entrevistas`);
       const list = await res.json();
-      e = list.find(x => x.id === id);
+      e = list.find(x => x.id && x.id.toUpperCase() === cleanId.toUpperCase());
     } catch(err) {
       console.error("Error loading single interview details:", err);
     }
   }
   if (!e) {
-    toast("❌ No se encontró la entrevista " + id);
+    toast("❌ No se encontró la entrevista " + cleanId);
     return;
   }
   
@@ -3246,19 +3255,26 @@ async function cargarReporteDesdeHash(id, print) {
   
   let participantes = [];
   try {
-    const res = await fetch(`/api/entrevistas/participantes?entrevista_id=${encodeURIComponent(id)}`);
+    const res = await fetch(`/api/entrevistas/participantes?entrevista_id=${encodeURIComponent(cleanId)}`);
     participantes = await res.json();
   } catch(err) {
     console.error("Error loading participants:", err);
   }
   
-  document.getElementById('reporte').innerHTML = generarHtmlReporte(e, true, participantes);
+  const rptCont = document.getElementById('reporte');
+  if (rptCont) {
+    rptCont.innerHTML = generarHtmlReporte(e, tieneAcceso, participantes);
+  }
   
-  iniciarLiveReportPolling(id);
+  if (typeof llenarReporte === 'function') {
+    try { llenarReporte(e); } catch(err) {}
+  }
+  
+  iniciarLiveReportPolling(cleanId);
   
   const rptTitle = document.querySelector('#pg-reporte .card-title');
   if (rptTitle) {
-    rptTitle.textContent = '📄 Vista de Ficha Oficial de Entrevista';
+    rptTitle.textContent = '📄 Vista de Ficha Oficial de Entrevista N° ' + cleanId;
   }
   
   const backBtn = document.querySelector('#pg-reporte .btn-secondary');
