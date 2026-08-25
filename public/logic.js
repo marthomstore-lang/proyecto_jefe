@@ -374,6 +374,14 @@ window.fetch = async function(url, options = {}) {
               for (const k in r) {
                 mappedRow[k] = r[k];
               }
+              if (sbTable === 'entrevistas') {
+                if (!mappedRow.participantes_relatos || mappedRow.participantes_relatos === '[]') {
+                  const metaObs = parseObsMetadata(r.obs || '');
+                  if (metaObs && metaObs.relatos) {
+                    mappedRow.participantes_relatos = metaObs.relatos;
+                  }
+                }
+              }
             }
             return mappedRow;
           });
@@ -454,12 +462,28 @@ window.fetch = async function(url, options = {}) {
             dbBody.id = responseId;
           }
           
-          const res = await originalFetch(`${SUPABASE_URL}/rest/v1/${sbTable}`, {
+          if (sbTable === 'entrevistas' && dbBody.participantes_relatos) {
+            if (!dbBody.obs || !dbBody.obs.includes('[RELATOS:')) {
+              dbBody.obs = (dbBody.obs || '') + '\n\n[RELATOS:' + encodeURIComponent(dbBody.participantes_relatos) + ']';
+            }
+          }
+
+          let res = await originalFetch(`${SUPABASE_URL}/rest/v1/${sbTable}`, {
             method: 'POST',
             headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
             body: JSON.stringify(dbBody)
           });
           
+          if (!res.ok && sbTable === 'entrevistas' && dbBody.participantes_relatos) {
+            const dbBodyFallback = { ...dbBody };
+            delete dbBodyFallback.participantes_relatos;
+            res = await originalFetch(`${SUPABASE_URL}/rest/v1/${sbTable}`, {
+              method: 'POST',
+              headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+              body: JSON.stringify(dbBodyFallback)
+            });
+          }
+
           if (res.ok) {
             return mockResponse({ success: true, id: responseId });
           } else {
@@ -1717,6 +1741,7 @@ function parseObsMetadata(obsText) {
   let cleanObs = obsText || '';
   let creador = null;
   let adjunto = null;
+  let relatos = null;
   
   // Buscar y extraer [CONFIDENCIAL:username]
   const confMatch = cleanObs.match(/\[CONFIDENCIAL:([^\]]+)\]/);
@@ -1725,6 +1750,22 @@ function parseObsMetadata(obsText) {
     cleanObs = cleanObs.replace(/\n\n\[CONFIDENCIAL:[^\]]+\]/g, '').replace(/\[CONFIDENCIAL:[^\]]+\]/g, '');
   }
   
+  // Buscar y extraer [RELATOS:data]
+  const relMatch = cleanObs.match(/\[RELATOS:([\s\S]+?)\](?=\s*$|\s*\[CONFIDENCIAL:|\s*\[ADJUNTO:)/) || cleanObs.match(/\[RELATOS:([^\]]+)\]/);
+  if (relMatch) {
+    let rawRel = relMatch[1];
+    try {
+      if (rawRel.includes('%')) {
+        relatos = decodeURIComponent(rawRel);
+      } else {
+        relatos = rawRel;
+      }
+    } catch(e) {
+      relatos = rawRel;
+    }
+    cleanObs = cleanObs.replace(/\n\n\[RELATOS:[\s\S]+?\]/g, '').replace(/\[RELATOS:[\s\S]+?\]/g, '');
+  }
+
   // Buscar y extraer [ADJUNTO:data] (admite JSON codificado o URLs directas)
   const adjMatch = cleanObs.match(/\[ADJUNTO:([\s\S]+?)\](?=\s*$|\s*\[CONFIDENCIAL:)/) || cleanObs.match(/\[ADJUNTO:([^\]]+)\]/);
   if (adjMatch) {
@@ -1741,7 +1782,7 @@ function parseObsMetadata(obsText) {
     cleanObs = cleanObs.replace(/\n\n\[ADJUNTO:[\s\S]+?\]/g, '').replace(/\[ADJUNTO:[\s\S]+?\]/g, '');
   }
   
-  return { obs: cleanObs.trim(), creador, adjunto };
+  return { obs: cleanObs.trim(), creador, adjunto, relatos };
 }
 
 function llenarReporte(e) {
