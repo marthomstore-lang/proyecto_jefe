@@ -2768,12 +2768,12 @@ setTimeout(() => {
   if (!window.location.hash || window.location.hash === '#' || window.location.hash === '#/') {
     window.location.hash = 'inicio';
   }
-  const initialPage = window.location.hash.slice(1).split('?')[0] || 'inicio';
+  const initialPage = window.location.hash.slice(1) || 'inicio';
   goTo(initialPage);
 }, 250);
 
 window.addEventListener('hashchange', () => {
-  const hash = window.location.hash.slice(1).split('?')[0] || 'inicio';
+  const hash = window.location.hash.slice(1) || 'inicio';
   goTo(hash);
 });
 
