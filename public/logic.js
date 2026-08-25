@@ -1898,6 +1898,54 @@ function toggleGroupRow(groupId) {
   }
 }
 
+function esEntrevistaVisibleParaUsuario(e, currentUser, currentNombre, userRole) {
+  if (userRole === 'Administrador' || userRole === 'ADMINISTRADOR' || currentUser === 'admin') {
+    return true;
+  }
+  
+  if (!currentUser) return true;
+  
+  const uLower = (currentUser || '').trim().toLowerCase();
+  const nLower = (currentNombre || '').trim().toLowerCase();
+  
+  // 1. Es el entrevistador responsable
+  const respLower = (e.resp || '').trim().toLowerCase();
+  if (respLower && (respLower === uLower || respLower === nLower || (nLower && respLower.includes(nLower)) || (nLower && nLower.includes(respLower)))) {
+    return true;
+  }
+  
+  // 2. Es el creador/autor de la entrevista
+  const meta = parseObsMetadata(e.obs || '');
+  if (meta.creador && (meta.creador.trim().toLowerCase() === uLower || meta.creador.trim().toLowerCase() === nLower)) {
+    return true;
+  }
+  
+  // 3. Es el Profesor Jefe asignado
+  const jefeLower = (e.jefe || '').trim().toLowerCase();
+  if (jefeLower && (jefeLower === uLower || jefeLower === nLower || (nLower && jefeLower.includes(nLower)) || (nLower && nLower.includes(jefeLower)))) {
+    return true;
+  }
+  
+  // 4. Está en la lista de participantes / relatos de la entrevista
+  let relatos = [];
+  try {
+    const rawParts = e.participantes_relatos || meta.relatos || '[]';
+    relatos = typeof rawParts === 'string' ? JSON.parse(rawParts) : rawParts;
+  } catch(err) {
+    relatos = [];
+  }
+  
+  if (Array.isArray(relatos)) {
+    const esRelator = relatos.some(p => {
+      const pName = (p.nombre || '').trim().toLowerCase();
+      return pName && (pName === uLower || pName === nLower || (nLower && pName.includes(nLower)) || (nLower && nLower.includes(pName)));
+    });
+    if (esRelator) return true;
+  }
+  
+  return false;
+}
+
 async function filtrarHistorial() {
   const q = txt(document.getElementById('hist-q').value).toLowerCase();
   const est = document.getElementById('hist-estado').value;
@@ -1907,7 +1955,13 @@ async function filtrarHistorial() {
 
   try {
     const res = await fetch(`/api/entrevistas?q=${encodeURIComponent(q)}&estado=${encodeURIComponent(est)}`);
-    entrevistas = await res.json();
+    const allEntrevistas = await res.json();
+    
+    const currentUser = sessionStorage.getItem('campanario_user');
+    const userRole = sessionStorage.getItem('campanario_perfil');
+    const currentNombre = sessionStorage.getItem('campanario_nombre');
+    
+    entrevistas = allEntrevistas.filter(e => esEntrevistaVisibleParaUsuario(e, currentUser, currentNombre, userRole));
     
     if (modoAgrupar !== 'ninguno') {
       if (divTabla) divTabla.style.display = 'none';
@@ -2721,8 +2775,12 @@ async function cargarHistorialCita(rut) {
     const res = await fetch('/api/entrevistas');
     const allEnts = await res.json();
     
-    // Filtrar por RUT (todas las entrevistas de este estudiante/funcionario)
-    const userEnts = allEnts.filter(x => txt(x.rut).toUpperCase() === txt(rut).toUpperCase());
+    const currentUser = sessionStorage.getItem('campanario_user');
+    const userRole = sessionStorage.getItem('campanario_perfil');
+    const currentNombre = sessionStorage.getItem('campanario_nombre');
+    
+    // Filtrar por RUT y por permisos de visualización del usuario
+    const userEnts = allEnts.filter(x => txt(x.rut).toUpperCase() === txt(rut).toUpperCase() && esEntrevistaVisibleParaUsuario(x, currentUser, currentNombre, userRole));
     
     if (userEnts.length === 0) {
       card.style.display = 'none';
