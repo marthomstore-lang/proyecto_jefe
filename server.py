@@ -6,6 +6,87 @@ import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
 from dotenv import load_dotenv
+import unicodedata
+
+def unidecode_simple(s):
+    if not s:
+        return ""
+    s = unicodedata.normalize('NFD', str(s))
+    return ''.join(c for c in s if unicodedata.category(c) != 'Mn').lower()
+
+def asegurar_usuarios_funcionarios(conn):
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT username, rut FROM usuarios")
+        existing_users = {row[0]: row[1] for row in cursor.fetchall()}
+        existing_ruts = set(existing_users.values())
+
+        cursor.execute("SELECT rut, nombres, apellido_paterno, apellido_materno FROM docentes")
+        docentes = cursor.fetchall()
+
+        cursor.execute("SELECT rut, nombres, apellido_paterno, apellido_materno FROM asistentes")
+        asistentes = cursor.fetchall()
+
+        todos = docentes + asistentes
+        nuevos_usuarios = []
+
+        for row in todos:
+            rut, nombres, ape_pat, ape_mat = row[0], row[1], row[2], row[3]
+            if not rut or rut in existing_ruts:
+                continue
+            
+            nombre_comp = f"{nombres or ''} {ape_pat or ''} {ape_mat or ''}".strip().title()
+            prim_nom = (nombres or '').strip().split()[0] if nombres else ''
+            ape_p = (ape_pat or '').strip().split()[0] if ape_pat else ''
+            
+            base_user = unidecode_simple(f"{prim_nom[:1]}{ape_p}") if (prim_nom and ape_p) else ''
+            base_user = ''.join(ch for ch in base_user if ch.isalnum())
+            
+            if not base_user:
+                base_user = rut.replace('.', '').replace('-', '').lower()
+                
+            uname = base_user
+            counter = 1
+            while uname in existing_users:
+                uname = f"{base_user}{counter}"
+                counter += 1
+                
+            clean_pass = rut.replace('.', '').split('-')[0]
+            
+            u_obj = {
+                'username': uname,
+                'rut': rut,
+                'nombre': nombre_comp,
+                'password': clean_pass,
+                'perfil': 'Entrevistador'
+            }
+
+            cursor.execute('''
+                INSERT INTO usuarios (username, rut, nombre, password, perfil)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (uname, rut, nombre_comp, clean_pass, 'Entrevistador'))
+            existing_users[uname] = rut
+            existing_ruts.add(rut)
+            nuevos_usuarios.append(u_obj)
+
+        conn.commit()
+
+        if nuevos_usuarios:
+            try:
+                import urllib.request
+                sb_url = "https://squfklurqnnoujcmvxjh.supabase.co/rest/v1/usuarios"
+                sb_headers = {
+                    'apikey': 'sb_publishable_i7ruBqqrqr4ro8YywVk0sQ_VhvY_R-m',
+                    'Authorization': 'Bearer sb_publishable_i7ruBqqrqr4ro8YywVk0sQ_VhvY_R-m',
+                    'Content-Type': 'application/json',
+                    'Prefer': 'resolution=merge-duplicates'
+                }
+                req = urllib.request.Request(sb_url, data=json.dumps(nuevos_usuarios).encode('utf-8'), headers=sb_headers, method='POST')
+                urllib.request.urlopen(req, timeout=5)
+            except Exception as sb_e:
+                print("Nota: No se pudo enviar sync a Supabase:", sb_e)
+    except Exception as err:
+        print("Error al asegurar usuarios de funcionarios:", err)
 
 # Cargar variables de entorno del archivo .env si existe
 load_dotenv()
@@ -668,6 +749,37 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 cursor.execute("SELECT * FROM administracion ORDER BY id DESC")
                 self.send_json([dict(row) for row in cursor.fetchall()])
 
+            # ── 9. META 2 ADECO 2026 ──
+            elif path == '/api/meta2/fichas':
+                cursor.execute("SELECT * FROM meta2_fichas ORDER BY id ASC")
+                fichas = [dict(r) for r in cursor.fetchall()]
+                for f in fichas:
+                    f_id = f['id']
+                    cursor.execute("SELECT COUNT(*) FROM meta2_evidencias WHERE recomendacion_id = ?", (f_id,))
+                    f['evidencias_count'] = cursor.fetchone()[0]
+                    cursor.execute("SELECT COUNT(*) FROM meta2_acuerdos WHERE recomendacion_id = ?", (f_id,))
+                    f['acuerdos_count'] = cursor.fetchone()[0]
+                self.send_json(fichas)
+
+            elif path == '/api/meta2/ficha':
+                rec_id = int(query.get('id', [1])[0])
+                cursor.execute("SELECT * FROM meta2_fichas WHERE id = ?", (rec_id,))
+                row = cursor.fetchone()
+                if not row:
+                    self.send_json({"error": "Ficha no encontrada"}, status=404)
+                    return
+                ficha = dict(row)
+                cursor.execute("SELECT * FROM meta2_evidencias WHERE recomendacion_id = ? ORDER BY id ASC", (rec_id,))
+                ficha['evidencias'] = [dict(r) for r in cursor.fetchall()]
+                cursor.execute("SELECT * FROM meta2_acuerdos WHERE recomendacion_id = ? ORDER BY id ASC", (rec_id,))
+                ficha['acuerdos'] = [dict(r) for r in cursor.fetchall()]
+                self.send_json(ficha)
+
+            elif path == '/api/meta2/evaluacion':
+                cursor.execute("SELECT * FROM meta2_evaluacion WHERE id = 1")
+                row = cursor.fetchone()
+                self.send_json(dict(row) if row else {})
+
             else:
                 self.send_error(404, "Endpoint Not Found")
                 
@@ -1089,8 +1201,8 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 cursor.execute("""
                 INSERT OR REPLACE INTO entrevistas (
                     id, rut, nombre, cargo, curso, jefe, asig, pie, fecha, 
-                    hora, resp, estado, seguimiento, objetivo, motivo, acuerdos, obs
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    hora, resp, estado, seguimiento, objetivo, motivo, acuerdos, obs, participantes_relatos
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     ent_id,
                     body.get("rut"),
@@ -1108,7 +1220,8 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                     body.get("objetivo"),
                     body.get("motivo"),
                     body.get("acuerdos"),
-                    body.get("obs")
+                    body.get("obs"),
+                    body.get("participantes_relatos", "[]")
                 ))
                 conn.commit()
                 self.send_json({"success": True, "id": ent_id})
@@ -1144,6 +1257,70 @@ class CampanarioRequestHandler(BaseHTTPRequestHandler):
                 ))
                 conn.commit()
                 self.send_json({"success": True})
+
+            # ── META 2 ADECO 2026 ──
+            elif path == '/api/meta2/ficha':
+                rec_id = int(body.get('id', 1))
+                fields = ['objetivo', 'brecha', 'accion', 'descripcion', 'responsable', 'frecuencia', 'estamentos', 'fecha_inicio', 'fecha_termino', 'ind_ejecucion', 'ind_resultado', 'linea_base', 'meta', 'avance', 'resultado_observado', 'dificultades', 'ajuste', 'responsable_ajuste', 'proxima_revision', 'observaciones']
+                set_clauses = []
+                params = []
+                for f in fields:
+                    if f in body:
+                        set_clauses.append(f"{f} = ?")
+                        params.append(body[f])
+                set_clauses.append("fecha_actualizacion = CURRENT_TIMESTAMP")
+                params.append(rec_id)
+                sql = f"UPDATE meta2_fichas SET {', '.join(set_clauses)} WHERE id = ?"
+                cursor.execute(sql, params)
+                conn.commit()
+                self.send_json({"success": True, "message": f"Ficha {rec_id} actualizada exitosamente"})
+
+            elif path == '/api/meta2/evidencia':
+                rec_id = int(body.get('recomendacion_id', 1))
+                tipo = body.get('tipo', 'Documento')
+                nombre = body.get('nombre', 'Sin título')
+                fecha = body.get('fecha', '')
+                url = body.get('url', '#')
+                cursor.execute("INSERT INTO meta2_evidencias (recomendacion_id, tipo, nombre, fecha, url) VALUES (?, ?, ?, ?, ?)", (rec_id, tipo, nombre, fecha, url))
+                conn.commit()
+                self.send_json({"success": True})
+
+            elif path == '/api/meta2/evidencia/delete':
+                ev_id = int(body.get('id', 0))
+                cursor.execute("DELETE FROM meta2_evidencias WHERE id = ?", (ev_id,))
+                conn.commit()
+                self.send_json({"success": True})
+
+            elif path == '/api/meta2/acuerdo':
+                rec_id = int(body.get('recomendacion_id', 1))
+                acuerdo = body.get('acuerdo', '')
+                resp = body.get('responsable', '')
+                plazo = body.get('plazo', '')
+                estado = body.get('estado', 'En ejecución')
+                obs = body.get('observacion', '')
+                cursor.execute("INSERT INTO meta2_acuerdos (recomendacion_id, acuerdo, responsable, plazo, estado, observacion) VALUES (?, ?, ?, ?, ?, ?)", (rec_id, acuerdo, resp, plazo, estado, obs))
+                conn.commit()
+                self.send_json({"success": True})
+
+            elif path == '/api/meta2/acuerdo/delete':
+                ac_id = int(body.get('id', 0))
+                cursor.execute("DELETE FROM meta2_acuerdos WHERE id = ?", (ac_id,))
+                conn.commit()
+                self.send_json({"success": True})
+
+            elif path == '/api/meta2/evaluacion':
+                fields = ['logros', 'colaborativo', 'bienestar', 'comunicacion', 'participacion', 'practicas', 'continuidad', 'meta3']
+                set_clauses = []
+                params = []
+                for f in fields:
+                    if f in body:
+                        set_clauses.append(f"{f} = ?")
+                        params.append(body[f])
+                set_clauses.append("fecha_actualizacion = CURRENT_TIMESTAMP")
+                sql = f"UPDATE meta2_evaluacion SET {', '.join(set_clauses)} WHERE id = 1"
+                cursor.execute(sql, params)
+                conn.commit()
+                self.send_json({"success": True, "message": "Evaluación consolidada guardada exitosamente"})
 
             else:
                 self.send_error(404, "Endpoint Not Found")
@@ -1293,12 +1470,111 @@ def run_server():
         """)
         conn.commit()
         
-        # Asegurar columna anotaciones en estudiantes
+        # Asegurar columna anotaciones en estudiantes y participantes_relatos en entrevistas
         try:
             cursor.execute("ALTER TABLE estudiantes ADD COLUMN anotaciones TEXT DEFAULT ''")
             conn.commit()
         except Exception:
             pass
+
+        try:
+            cursor.execute("ALTER TABLE entrevistas ADD COLUMN participantes_relatos TEXT DEFAULT '[]'")
+            conn.commit()
+        except Exception:
+            pass
+
+        # Asegurar usuarios para todos los funcionarios (docentes y asistentes)
+        asegurar_usuarios_funcionarios(conn)
+
+        # ── TABLAS META 2 ADECO 2026 ──
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS meta2_fichas (
+            id INTEGER PRIMARY KEY,
+            titulo TEXT,
+            responsable TEXT,
+            objetivo TEXT,
+            brecha TEXT,
+            accion TEXT,
+            descripcion TEXT,
+            frecuencia TEXT,
+            estamentos TEXT,
+            fecha_inicio TEXT,
+            fecha_termino TEXT,
+            ind_ejecucion TEXT,
+            ind_resultado TEXT,
+            linea_base TEXT,
+            meta TEXT,
+            avance INTEGER DEFAULT 0,
+            resultado_observado TEXT,
+            dificultades TEXT,
+            ajuste TEXT,
+            responsable_ajuste TEXT,
+            proxima_revision TEXT,
+            observaciones TEXT,
+            fecha_actualizacion TEXT
+        )
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS meta2_evidencias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recomendacion_id INTEGER,
+            tipo TEXT,
+            nombre TEXT,
+            fecha TEXT,
+            url TEXT
+        )
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS meta2_acuerdos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recomendacion_id INTEGER,
+            acuerdo TEXT,
+            responsable TEXT,
+            plazo TEXT,
+            estado TEXT DEFAULT 'En ejecución',
+            observacion TEXT
+        )
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS meta2_evaluacion (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            logros TEXT,
+            colaborativo TEXT,
+            bienestar TEXT,
+            comunicacion TEXT,
+            participacion TEXT,
+            practicas TEXT,
+            continuidad TEXT,
+            meta3 TEXT,
+            fecha_actualizacion TEXT
+        )
+        """)
+        conn.commit()
+
+        cursor.execute("SELECT COUNT(*) FROM meta2_fichas")
+        row_f = cursor.fetchone()
+        cnt_f = row_f[0] if row_f else 0
+        if cnt_f == 0:
+            recs = [
+                (1, "Institucionalizar tiempos de trabajo colaborativo", "Equipo Directivo / UTP", "Establecer calendario fijo de CAP y protección de horarios", "Falta de tiempos protegidos para trabajo colaborativo", "Calendarizar sesiones mensuales obligatorias", "Reuniones de 90 min por departamento para comunidades de aprendizaje", "Mensual", "Dirección, UTP, Docentes", "2026-03-01", "2026-11-30", "N° de sesiones ejecutadas", "% de asistencia activa y participación en CAP", "51,5% de funcionarios señala baja frecuencia de trabajo colaborativo", "100% de CAP realizadas según calendario anual", 60),
+                (2, "Fortalecer participación de todos los estamentos", "Convivencia Educativa", "Involucrar activamente a Asistentes de la Educación, PIE y Apoyo", "Baja participación de asistentes de la educación en decisiones pedagógicas", "Jornadas de integración por estamento", "Talleres bimestrales de colaboración interdisciplinaria", "Trimestral", "Asistentes, Convivencia, PIE, Orientación", "2026-03-15", "2026-11-15", "N° de talleres realizados por estamento", "% representación e involucramiento por estamento", "Diagnóstico inicial refleja baja representatividad de asistentes", "Alcanzar 80% de asistencia de asistentes de la educación", 40),
+                (3, "Incorporar indicadores que permitan observar cambios", "UTP / Orientación", "Medir percepción de bienestar socioemocional y confianza entre pares", "Actualmente solo se mide asistencia y ejecución de actividades", "Diseño de rúbrica de clima y confianza institucional", "Aplicación de encuestas trimestrales y medición de porcentaje de acuerdos cumplidos", "Trimestral", "Orientación, Docentes, UTP", "2026-04-01", "2026-11-30", "Instrumento de percepción validado y aplicado", "Índice de bienestar socioemocional y apoyo entre pares", "Medición cualitativa previa fragmentada", "Incremento de 15 puntos en el indicador de confianza entre pares", 20),
+                (4, "Aplicar instrumentos de percepción durante el proceso", "Equipos de Apoyo", "Aplicar diagnóstico 'Tu Función Me Importa' como línea base", "Sin diagnóstico inicial estandarizado sobre carga y función", "Aplicación de encuesta diagnóstica inicial y seguimiento", "Levantamiento digital de datos de percepción de todos los funcionarios", "Única", "Dirección, UTP, Convivencia, Orientación, PIE, Docentes, Asistentes", "2026-03-01", "2026-04-15", "Encuesta aplicada al 100% de la dotación", "Línea base institucional establecida", "Cero instrumentos aplicados previamente", "100% de la dotación encuestada", 75),
+                (5, "Socializar periódicamente los avances del proyecto", "Dirección", "Rendir cuenta periódica en Consejo Escolar y de Profesores", "Poca difusión de los avances del proyecto ADECO a la comunidad", "Presentaciones bimestrales de avance e impacto", "Exposición de avances, dificultades, ajustes y decisiones en consejos", "Mensual", "Dirección, Docentes, Asistentes", "2026-04-01", "2026-11-30", "N° de presentaciones de avance realizadas", "% comprensión de avances por parte de la comunidad", "Retroalimentación previa informal", "4 reportes presentados al año", 10)
+            ]
+            for r in recs:
+                cursor.execute("""
+                INSERT INTO meta2_fichas (id, titulo, responsable, objetivo, brecha, accion, descripcion, frecuencia, estamentos, fecha_inicio, fecha_termino, ind_ejecucion, ind_resultado, linea_base, meta, avance)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, r)
+            conn.commit()
+
+        cursor.execute("SELECT COUNT(*) FROM meta2_evaluacion")
+        row_e = cursor.fetchone()
+        cnt_e = row_e[0] if row_e else 0
+        if cnt_e == 0:
+            cursor.execute("INSERT INTO meta2_evaluacion (id, logros, colaborativo, bienestar, comunicacion, participacion, practicas, continuidad, meta3) VALUES (1, '', '', '', '', '', '', '', '')")
+            conn.commit()
             
         cursor.execute("SELECT COUNT(*) FROM usuarios")
         row = cursor.fetchone()
@@ -1331,5 +1607,42 @@ def run_server():
         print("\nCerrando servidor backend...")
         httpd.server_close()
 
+def sync_from_supabase_on_start():
+    print("[SUPABASE] Sincronizando datos en tiempo real desde Supabase (Cloud)...")
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        headers = {
+            "apikey": "sb_publishable_i7ruBqqrqr4ro8YywVk0sQ_VhvY_R-m",
+            "Authorization": "Bearer sb_publishable_i7ruBqqrqr4ro8YywVk0sQ_VhvY_R-m"
+        }
+        tables = ["usuarios", "estudiantes", "docentes", "asistentes", "entrevistas", "contabilidad", "administracion"]
+        for t in tables:
+            try:
+                url = f"https://squfklurqnnoujcmvxjh.supabase.co/rest/v1/{t}?select=*"
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    data = json.loads(resp.read().decode('utf-8'))
+                    if not data:
+                        continue
+                    cursor.execute(f"PRAGMA table_info({t})")
+                    pragma_cols = [col[1] for col in cursor.fetchall()]
+                    if not pragma_cols:
+                        continue
+                    cols_str = ", ".join(pragma_cols)
+                    placeholders = ", ".join(["?"] * len(pragma_cols))
+                    query = f"INSERT OR REPLACE INTO {t} ({cols_str}) VALUES ({placeholders})"
+                    for row in data:
+                        values = [row.get(col) for col in pragma_cols]
+                        cursor.execute(query, values)
+                    conn.commit()
+            except Exception as e:
+                pass
+        conn.close()
+        print("[SUPABASE] Datos cargados correctamente desde Supabase.")
+    except Exception as e:
+        print(f"[SUPABASE] Error al sincronizar desde Supabase: {e}")
+
 if __name__ == '__main__':
+    sync_from_supabase_on_start()
     run_server()

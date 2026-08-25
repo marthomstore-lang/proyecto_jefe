@@ -83,6 +83,7 @@
     <div class="nav-label">Entrevistas & Visitas</div>
     <div class="nav-item" onclick="limpiarForm(); goTo('nueva-entrevista')"><span class="icon">📝</span> Nueva entrevista</div>
     <div class="nav-item" onclick="limpiarFormCaminata(); goTo('caminata-pedagogica')"><span class="icon">🚶‍♂️</span> Caminata Pedagógica <span class="badge-count" style="background:#0d9488; color:#fff;">ADECO</span></div>
+    <div class="nav-item" onclick="goTo('meta2-adeco')"><span class="icon">🎯</span> Seguimiento META 2 <span class="badge-count" style="background:#4f46e5; color:#fff;">META 2</span></div>
     <div class="nav-item" onclick="goTo('historial')"><span class="icon">🕘</span> Historial <span class="badge-count" id="cnt-ent">0</span></div>
     <div class="nav-item" onclick="goTo('evidencias')"><span class="icon">📂</span> Evidencias y Drive</div>
     <div class="nav-item" onclick="goTo('reporte')"><span class="icon">📄</span> Ficha Impresión</div>
@@ -380,8 +381,12 @@
 
 <!-- ══════════════ ESTUDIANTES ══════════════ -->
 <div class="page" id="pg-estudiantes">
-  <div class="card-header">
+  <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
     <div class="card-title">🎒 Base de Datos — Estudiantes del Establecimiento</div>
+    <div style="display: flex; gap: 8px;">
+      <button type="button" class="btn btn-sm btn-primary" id="btn-est-mode-tabla" onclick="cambiarModoVistaEstudiantes('tabla')" style="font-size: 12px; font-weight: 700;">📋 Vista Tabla</button>
+      <button type="button" class="btn btn-sm btn-secondary" id="btn-est-mode-agrupado" onclick="cambiarModoVistaEstudiantes('agrupado')" style="font-size: 12px; font-weight: 700;">📁 Agrupar por Nivel MINEDUC</button>
+    </div>
   </div>
   <div class="card">
     <div class="search-row">
@@ -394,7 +399,9 @@
       </select>
     </div>
     <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;font-weight:500;" id="est-count"></div>
-    <div class="tbl-wrap">
+    
+    <!-- VISTA TABLA CONTINUA -->
+    <div class="tbl-wrap" id="est-contenedor-tabla">
       <table id="tbl-est">
         <thead>
           <tr>
@@ -410,6 +417,11 @@
         </thead>
         <tbody></tbody>
       </table>
+    </div>
+
+    <!-- VISTA AGRUPADA POR NIVEL MINEDUC -->
+    <div id="est-contenedor-agrupado" style="display: none; flex-direction: column; gap: 16px;">
+      <!-- Se inyecta dinámicamente -->
     </div>
   </div>
 </div>
@@ -995,6 +1007,24 @@
       </div>
     </div>
     
+    <!-- SECCIÓN PARTICIPANTES ADICIONALES Y DECLARACIONES / RELATOS -->
+    <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: var(--radius-sm); padding: 18px; margin-top: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
+        <label style="font-weight: 700; font-size: 14px; color: #0369a1; margin: 0; display: flex; align-items: center; gap: 8px;">
+          👥 Participantes Adicionales y Declaraciones / Relatos
+        </label>
+        <button type="button" class="btn btn-sm btn-primary" onclick="agregarParticipanteRelatoForm()" style="font-size: 12px; font-weight: 700; background: #0284c7; border-color: #0284c7;">
+          + Agregar Participante / Relato
+        </button>
+      </div>
+      <p style="font-size: 12.5px; color: #0369a1; margin: 0 0 14px 0;">
+        Registre testimonios, aportes o declaraciones de otras personas presentes o involucradas en esta entrevista (Apoderados, Profesores, Convivencia Escolar, PIE, Testigos, etc.).
+      </p>
+      <div id="e-participantes-relatos-list" style="display: flex; flex-direction: column; gap: 12px;">
+        <!-- Se inyecta dinámicamente -->
+      </div>
+    </div>
+    
     <div class="form-group" style="margin-top:16px">
       <label>Observaciones generales</label>
       <textarea id="e-obs" rows="3" placeholder="Información complementaria, citaciones adicionales o derivaciones..."></textarea>
@@ -1048,12 +1078,20 @@
 
 <!-- ══════════════ HISTORIAL ══════════════ -->
 <div class="page" id="pg-historial">
-  <div class="card-header">
+  <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
     <div class="card-title">🕘 Historial y Archivo de Entrevistas</div>
+    <div style="display: flex; gap: 8px; align-items: center;">
+      <span style="font-size: 13px; font-weight: 700; color: var(--text-secondary);">Agrupar por:</span>
+      <select id="hist-agrupar" onchange="filtrarHistorial()" style="padding: 6px 12px; font-size: 13px; font-weight: 700; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary);">
+        <option value="ninguno">📄 Sin agrupar (Lista Continua)</option>
+        <option value="curso">🏫 Agrupar por Curso / Función</option>
+        <option value="estamento">👥 Agrupar por Estamento</option>
+      </select>
+    </div>
   </div>
   <div class="card">
     <div class="search-row">
-      <input id="hist-q" placeholder="Buscar por ID, RUT o Nombre..." oninput="filtrarHistorial()">
+      <input id="hist-q" placeholder="Buscar por ID, RUT, Nombre o Curso..." oninput="filtrarHistorial()">
       <select id="hist-estado" onchange="filtrarHistorial()">
         <option value="">Todos los estados</option>
         <option value="Abierta">Abierta</option>
@@ -1065,7 +1103,9 @@
         🖨️ Imprimir Seleccionadas (<span id="lbl-cnt-sel">0</span>)
       </button>
     </div>
-    <div class="tbl-wrap">
+    
+    <!-- VISTA TABLA CONTINUA -->
+    <div class="tbl-wrap" id="hist-contenedor-tabla">
       <table id="tbl-hist">
         <thead>
           <tr>
@@ -1081,6 +1121,11 @@
         </thead>
         <tbody></tbody>
       </table>
+    </div>
+
+    <!-- VISTA AGRUPADA POR CURSO O ESTAMENTO -->
+    <div id="hist-contenedor-agrupado" style="display: none; flex-direction: column; gap: 16px; margin-top: 12px;">
+      <!-- Se inyecta dinámicamente -->
     </div>
   </div>
 </div>
@@ -1156,12 +1201,16 @@
           <a id="r-adjunto-link" href="#" target="_blank" style="color: var(--primary, #4f46e5); font-weight: 600; text-decoration: none;">🔗 Ver documento en Google Drive / Evidencia</a>
         </div>
       </div>
+      <div class="rpt-row full" id="r-participantes-row" style="display: none; border-bottom: 1px solid #e2e8f0;">
+        <div class="rpt-cell rpt-label">Declaraciones y Relatos de Participantes Adicionales</div>
+        <div class="rpt-cell" id="r-participantes-list" style="min-height:48px; line-height: 1.4; padding: 10px 14px;"></div>
+      </div>
       <div class="rpt-row full">
         <div class="rpt-cell rpt-label last-row">Observaciones Generales</div>
         <div class="rpt-cell last-row" id="r-obs" style="min-height:48px; line-height: 1.4"></div>
       </div>
       
-      <div class="firma-row">
+      <div class="firma-row" id="r-firmas-container">
         <div>
           <br><br>
           ________________________________________<br>
@@ -1351,6 +1400,7 @@
         </tbody>
       </table>
     </div>
+  </div>
   <div class="card" style="margin-top: 24px;">
     <div class="card-title">🖼️ Identidad Institucional — Logo del Liceo</div>
     <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-top: 16px;">
@@ -1433,6 +1483,373 @@
         </tbody>
       </table>
     </div>
+  </div>
+</div>
+
+<!-- ══════════════ SEGUIMIENTO META 2 ADECO 2026 ══════════════ -->
+<div class="page" id="pg-meta2-adeco">
+  <!-- HEADER DE LA PÁGINA -->
+  <div style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); padding: 24px 28px; border-radius: var(--radius-md); color: #fff; margin-bottom: 24px; box-shadow: var(--shadow-sm); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px;">
+    <div>
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+        <span style="background: rgba(255, 255, 255, 0.15); padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 700; font-family: monospace; letter-spacing: 0.5px;">ADECO 2026</span>
+        <span style="font-size: 12px; opacity: 0.85;">Liceo T.P. Campanario • RBD 3941</span>
+      </div>
+      <h2 style="font-size: 22px; font-weight: 800; margin: 0; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">Plataforma de Seguimiento META 2 ADECO 2026</h2>
+      <p style="font-size: 13px; opacity: 0.9; margin: 4px 0 0 0;">Trabajo colaborativo para favorecer el bienestar socioemocional de los equipos educativos</p>
+    </div>
+    <div style="display: flex; gap: 10px;">
+      <button type="button" class="btn btn-secondary" onclick="window.print()" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff;"><span class="icon">🖨️</span> Exportar / Imprimir</button>
+    </div>
+  </div>
+
+  <!-- METRICAS GENERALES (KPIs) -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
+    <div class="card" style="padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; border-left: 4px solid #4f46e5;">
+      <div>
+        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px;">Avance Global Meta 2</div>
+        <div style="font-size: 28px; font-weight: 900; color: #312e81; margin-top: 4px;" id="m2-kpi-avance">0%</div>
+      </div>
+      <div style="font-size: 32px;">📈</div>
+    </div>
+    <div class="card" style="padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; border-left: 4px solid #2563eb;">
+      <div>
+        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px;">Recomendaciones</div>
+        <div style="font-size: 28px; font-weight: 900; color: var(--text-primary); margin-top: 4px;">5 <span style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">Totales</span></div>
+      </div>
+      <div style="font-size: 32px;">📋</div>
+    </div>
+    <div class="card" style="padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; border-left: 4px solid #059669;">
+      <div>
+        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px;">Acuerdos Registrados</div>
+        <div style="font-size: 28px; font-weight: 900; color: var(--text-primary); margin-top: 4px;" id="m2-kpi-acuerdos">0</div>
+      </div>
+      <div style="font-size: 32px;">✅</div>
+    </div>
+    <div class="card" style="padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; border-left: 4px solid #d97706;">
+      <div>
+        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px;">Evidencias Cargadas</div>
+        <div style="font-size: 28px; font-weight: 900; color: var(--text-primary); margin-top: 4px;" id="m2-kpi-evidencias">0</div>
+      </div>
+      <div style="font-size: 32px;">📎</div>
+    </div>
+  </div>
+
+  <!-- NAVEGACIÓN POR PESTAÑAS (TABS) -->
+  <div style="display: flex; gap: 8px; border-bottom: 2px solid var(--border); margin-bottom: 24px; overflow-x: auto;">
+    <button type="button" class="tab-btn-m2 active" id="tab-m2-panel" onclick="cambiarTabMeta2('panel')" style="padding: 12px 20px; font-size: 14px; font-weight: 700; border: none; background: transparent; color: #4f46e5; border-bottom: 3px solid #4f46e5; cursor: pointer; display: flex; align-items: center; gap: 8px; white-space: nowrap;">
+      📊 Panel de Seguimiento
+    </button>
+    <button type="button" class="tab-btn-m2" id="tab-m2-fichas" onclick="cambiarTabMeta2('fichas')" style="padding: 12px 20px; font-size: 14px; font-weight: 600; border: none; background: transparent; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 8px; white-space: nowrap;">
+      📄 Fichas por Recomendación
+    </button>
+    <button type="button" class="tab-btn-m2" id="tab-m2-evaluacion" onclick="cambiarTabMeta2('evaluacion')" style="padding: 12px 20px; font-size: 14px; font-weight: 600; border: none; background: transparent; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 8px; white-space: nowrap;">
+      🏆 Evaluación Consolidada
+    </button>
+  </div>
+
+  <!-- VISTA TABS 1: PANEL GENERAL -->
+  <div id="m2-vista-panel" style="display: block;">
+    <div class="card" style="padding: 0; overflow: hidden; margin-bottom: 20px;">
+      <div style="padding: 16px 20px; background: var(--bg-body); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+          📋 Panel General de Seguimiento de Recomendaciones
+        </h3>
+        <div style="font-size: 12px; color: var(--text-secondary);">
+          Clave: <strong style="color:#64748b;">NI</strong>=No iniciado | <strong style="color:#2563eb;">D</strong>=Diseño | <strong style="color:#d97706;">E</strong>=Ejecución | <strong style="color:#4f46e5;">S</strong>=Seguimiento | <strong style="color:#059669;">C</strong>=Cumplido
+        </div>
+      </div>
+      <div style="overflow-x: auto;">
+        <table class="data-table" id="tbl-m2-dashboard">
+          <thead>
+            <tr>
+              <th style="width: 50px; text-align: center;">N°</th>
+              <th>Recomendación</th>
+              <th>Responsable Principal</th>
+              <th style="text-align: center;">Estado</th>
+              <th style="width: 200px;">Progreso</th>
+              <th style="text-align: center; width: 100px;">Acción</th>
+            </tr>
+          </thead>
+          <tbody id="m2-tbody-dashboard">
+            <!-- Inyectado dinámicamente -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- GLOSARIO DE ESTADOS -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+      <div style="padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; display: flex; align-items: center; gap: 10px;">
+        <span style="padding: 3px 8px; font-weight: 700; border-radius: 4px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;">NI</span>
+        <span>No iniciado (0%)</span>
+      </div>
+      <div style="padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; display: flex; align-items: center; gap: 10px;">
+        <span style="padding: 3px 8px; font-weight: 700; border-radius: 4px; background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd;">D</span>
+        <span>En Diseño (1-29%)</span>
+      </div>
+      <div style="padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; display: flex; align-items: center; gap: 10px;">
+        <span style="padding: 3px 8px; font-weight: 700; border-radius: 4px; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;">E</span>
+        <span>En Ejecución (30-69%)</span>
+      </div>
+      <div style="padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; display: flex; align-items: center; gap: 10px;">
+        <span style="padding: 3px 8px; font-weight: 700; border-radius: 4px; background: #e0e7ff; color: #3730a3; border: 1px solid #a5b4fc;">S</span>
+        <span>En Seguimiento (70-99%)</span>
+      </div>
+      <div style="padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; display: flex; align-items: center; gap: 10px;">
+        <span style="padding: 3px 8px; font-weight: 700; border-radius: 4px; background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7;">C</span>
+        <span>Cumplido (100%)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- VISTA TABS 2: FICHAS POR RECOMENDACIÓN -->
+  <div id="m2-vista-fichas" style="display: none;">
+    <!-- SELECTOR DE RECOMENDACIÓN -->
+    <div class="card" style="padding: 16px 20px; margin-bottom: 20px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; background: #f8fafc;">
+      <label style="font-weight: 700; font-size: 14px; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+        🔍 Seleccionar Recomendación:
+      </label>
+      <select id="m2-select-rec" onchange="cargarMeta2Ficha(this.value)" style="flex: 1; min-width: 280px; max-width: 600px; padding: 10px 14px; font-size: 13.5px; font-weight: 600; border: 1px solid var(--border); border-radius: 8px; background: #fff; outline: none;">
+        <option value="1">Recomendación 1: Institucionalizar tiempos de trabajo colaborativo</option>
+        <option value="2">Recomendación 2: Fortalecer participación de todos los estamentos</option>
+        <option value="3">Recomendación 3: Incorporar indicadores que permitan observar cambios</option>
+        <option value="4">Recomendación 4: Aplicar instrumentos de percepción durante el proceso</option>
+        <option value="5">Recomendación 5: Socializar periódicamente los avances del proyecto</option>
+      </select>
+    </div>
+
+    <!-- CUADRO DE SUGERENCIAS ASOCIADAS DE SOSTENEDOR -->
+    <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; color: #78350f;">
+      <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700; color: #451a03; display: flex; align-items: center; gap: 8px;">
+        💡 Orientaciones del Nivel Sostenedor para esta recomendación:
+      </h4>
+      <ul id="m2-orientaciones-list" style="margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.6;">
+        <!-- Dinámico -->
+      </ul>
+    </div>
+
+    <!-- FORMULARIO DE FICHA INTEGRAL -->
+    <form id="form-meta2-ficha" onsubmit="guardarMeta2Ficha(event)">
+      <div class="card" style="padding: 24px; margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding-bottom: 14px; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+          <h3 style="margin: 0; font-size: 17px; font-weight: 800; color: #312e81;" id="m2-ficha-titulo">Ficha 3.1: Recomendación</h3>
+          <button type="submit" class="btn btn-primary" style="padding: 8px 20px; font-weight: 700;">💾 Guardar Ficha</button>
+        </div>
+
+        <!-- SECCIÓN 1: DEFINICIÓN ESTRATÉGICA -->
+        <h4 style="font-size: 12px; font-weight: 800; text-transform: uppercase; color: #4f46e5; letter-spacing: 0.5px; margin: 0 0 16px 0; padding-bottom: 6px; border-bottom: 1px solid #e0e7ff;">1. Definición Estratégica</h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px;">
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Objetivo específico que se abordará</label>
+            <textarea id="m2_objetivo" rows="2" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;" placeholder="Ingrese el objetivo..."></textarea>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Situación inicial / brecha identificada</label>
+            <textarea id="m2_brecha" rows="2" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;" placeholder="Describa la situación de partida..."></textarea>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Acción o estrategia definida</label>
+            <textarea id="m2_accion" rows="2" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;" placeholder="Defina la estrategia..."></textarea>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Descripción de la actividad</label>
+            <textarea id="m2_descripcion" rows="2" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;" placeholder="Detalle la actividad..."></textarea>
+          </div>
+        </div>
+
+        <!-- SECCIÓN 2: RESPONSIBILIDAD Y COBERTURA -->
+        <h4 style="font-size: 12px; font-weight: 800; text-transform: uppercase; color: #4f46e5; letter-spacing: 0.5px; margin: 0 0 16px 0; padding-bottom: 6px; border-bottom: 1px solid #e0e7ff;">2. Responsabilidad y Cobertura</h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Responsable Principal</label>
+            <input type="text" id="m2_responsable" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;" placeholder="Ej. Equipo Directivo / UTP">
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Frecuencia</label>
+            <select id="m2_frecuencia" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;">
+              <option value="Única">Única</option>
+              <option value="Semanal">Semanal</option>
+              <option value="Quincenal">Quincenal</option>
+              <option value="Mensual">Mensual</option>
+              <option value="Trimestral">Trimestral</option>
+              <option value="Otra">Otra</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Fecha de Inicio</label>
+            <input type="date" id="m2_fecha_inicio" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;">
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Fecha Comprometida Término</label>
+            <input type="date" id="m2_fecha_termino" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;">
+          </div>
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label style="font-weight: 700; font-size: 13px; margin-bottom: 6px; display: block;">Estamentos Involucrados</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 14px; background: #f8fafc; padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; font-size: 12.5px;">
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="checkbox" value="Dirección" class="m2-chk-estamento"> Dirección</label>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="checkbox" value="UTP" class="m2-chk-estamento"> UTP</label>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="checkbox" value="Convivencia" class="m2-chk-estamento"> Convivencia</label>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="checkbox" value="Orientación" class="m2-chk-estamento"> Orientación</label>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="checkbox" value="PIE" class="m2-chk-estamento"> PIE</label>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="checkbox" value="Docentes" class="m2-chk-estamento"> Docentes</label>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="checkbox" value="Asistentes" class="m2-chk-estamento"> Asistentes de la Educación</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECCIÓN 3: INDICADORES, DIAGNÓSTICO Y AVANCE -->
+        <h4 style="font-size: 12px; font-weight: 800; text-transform: uppercase; color: #4f46e5; letter-spacing: 0.5px; margin: 0 0 16px 0; padding-bottom: 6px; border-bottom: 1px solid #e0e7ff;">3. Indicadores, Diagnóstico y Nivel de Avance</h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Indicador de Ejecución</label>
+            <input type="text" id="m2_ind_ejecucion" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;" placeholder="Ej. N° talleres realizados">
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Indicador de Resultado</label>
+            <input type="text" id="m2_ind_resultado" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;" placeholder="Ej. % percepción de bienestar">
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Línea Base (Diagnóstico)</label>
+            <input type="text" id="m2_linea_base" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;" placeholder="Ej. 51,5% baja participación">
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Meta / Criterio Logro</label>
+            <input type="text" id="m2_meta" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;" placeholder="Ej. 80% de participación">
+          </div>
+          <div class="form-group" style="grid-column: 1 / -1; background: #f8fafc; padding: 16px; border-radius: 10px; border: 1px solid var(--border);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 10px;">
+              <label style="font-weight: 700; font-size: 13.5px; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 8px;">
+                📈 Nivel de Avance (%)
+              </label>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="calcularAvanceAutomaticoMeta2()" style="font-size: 11.5px; font-weight: 700; padding: 4px 12px; background: #e0e7ff; color: #3730a3; border: 1px solid #a5b4fc; cursor: pointer;">
+                  ⚡ Calcular Avance Automático
+                </button>
+                <strong id="m2-val-avance" style="font-size: 18px; font-weight: 900; color: #312e81;">0%</strong>
+              </div>
+            </div>
+            <input type="range" id="m2_avance" min="0" max="100" value="0" oninput="document.getElementById('m2-val-avance').innerText = this.value + '%'" style="width: 100%; cursor: pointer;">
+            <div id="m2-desglose-avance" style="font-size: 11.5px; color: var(--text-secondary); margin-top: 8px; background: #fff; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0; display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between;">
+              <span>🎯 Planificación: <strong>0/20%</strong></span>
+              <span>📊 Indicadores: <strong>0/20%</strong></span>
+              <span>📎 Evidencias: <strong>0/20%</strong></span>
+              <span>✅ Acuerdos: <strong>0/30%</strong></span>
+              <span>📝 Resultado: <strong>0/10%</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECCIÓN 4: GESTIÓN DE CONTINGENCIAS Y AJUSTES -->
+        <h4 style="font-size: 12px; font-weight: 800; text-transform: uppercase; color: #4f46e5; letter-spacing: 0.5px; margin: 0 0 16px 0; padding-bottom: 6px; border-bottom: 1px solid #e0e7ff;">4. Resultado Observado y Gestión de Ajustes</h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px;">
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Resultado Observado</label>
+            <textarea id="m2_resultado_observado" rows="2" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;" placeholder="Describa el resultado cuantitativo o cualitativo..."></textarea>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Dificultades o Nudos Críticos</label>
+            <textarea id="m2_dificultades" rows="2" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;" placeholder="Obstáculos surgidos durante la ejecución..."></textarea>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Ajustes Acordados</label>
+            <textarea id="m2_ajuste" rows="2" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;" placeholder="Modificaciones o acciones correctoras..."></textarea>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Responsable del Ajuste</label>
+            <input type="text" id="m2_responsable_ajuste" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;" placeholder="Ej. UTP">
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Fecha Próxima Revisión</label>
+            <input type="date" id="m2_proxima_revision" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;">
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">Observaciones Generales</label>
+            <textarea id="m2_observaciones" rows="1" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none;" placeholder="Comentarios complementarios..."></textarea>
+          </div>
+        </div>
+
+        <!-- SECCIÓN 5: TABLAS DE EVIDENCIAS Y ACUERDOS -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin-top: 10px;">
+          <!-- REGISTRO DE EVIDENCIAS -->
+          <div style="background: #f8fafc; padding: 18px; border-radius: 10px; border: 1px solid var(--border);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h5 style="margin: 0; font-size: 13px; font-weight: 800; text-transform: uppercase; color: #451a03; display: flex; align-items: center; gap: 6px;">
+                📎 Registro de Evidencias
+              </h5>
+              <button type="button" class="btn btn-sm btn-primary" onclick="agregarEvidenciaMeta2()" style="font-size: 11px; padding: 4px 10px;">+ Agregar Evidencia</button>
+            </div>
+            <div id="m2-contenedor-evidencias" style="display: flex; flex-direction: column; gap: 8px;">
+              <!-- Filas dinámicas -->
+            </div>
+          </div>
+
+          <!-- SEGUIMIENTO DE ACUERDOS -->
+          <div style="background: #f8fafc; padding: 18px; border-radius: 10px; border: 1px solid var(--border);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h5 style="margin: 0; font-size: 13px; font-weight: 800; text-transform: uppercase; color: #064e3b; display: flex; align-items: center; gap: 6px;">
+                ✅ Seguimiento de Acuerdos
+              </h5>
+              <button type="button" class="btn btn-sm btn-primary" onclick="agregarAcuerdoMeta2()" style="font-size: 11px; padding: 4px 10px; background: #059669; border-color: #059669;">+ Agregar Acuerdo</button>
+            </div>
+            <div id="m2-contenedor-acuerdos" style="display: flex; flex-direction: column; gap: 8px;">
+              <!-- Filas dinámicas -->
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </form>
+  </div>
+
+  <!-- VISTA TABS 3: EVALUACIÓN CONSOLIDADA DE LA META 2 -->
+  <div id="m2-vista-evaluacion" style="display: none;">
+    <form id="form-meta2-evaluacion" onsubmit="guardarMeta2Evaluacion(event)">
+      <div class="card" style="padding: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding-bottom: 14px; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <h3 style="margin: 0; font-size: 17px; font-weight: 800; color: #312e81;">🏆 4. Evaluación Consolidada de la Meta 2</h3>
+            <p style="font-size: 13px; color: var(--text-secondary); margin: 2px 0 0 0;">Síntesis cualitativa final del proyecto e impacto socioemocional institucionales.</p>
+          </div>
+          <button type="submit" class="btn btn-primary" style="padding: 8px 20px; font-weight: 700;">💾 Guardar Evaluación Consolidada</button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">1. Principales logros alcanzados</label>
+            <textarea id="m2_eval_logros" rows="3" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 13px; outline: none;" placeholder="Describa los logros más importantes..."></textarea>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">2. Cambios observados en el trabajo colaborativo</label>
+            <textarea id="m2_eval_colaborativo" rows="3" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 13px; outline: none;" placeholder="Describa cambios en dinámicas de trabajo..."></textarea>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">3. Cambios observados en bienestar socioemocional</label>
+            <textarea id="m2_eval_bienestar" rows="3" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 13px; outline: none;" placeholder="Impacto en clima y bienestar de los funcionarios..."></textarea>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">4. Cambios observados en comunicación y confianza</label>
+            <textarea id="m2_eval_comunicacion" rows="3" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 13px; outline: none;" placeholder="Evolución en transparencia y apoyo entre pares..."></textarea>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">5. Participación de los distintos estamentos</label>
+            <textarea id="m2_eval_participacion" rows="3" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 13px; outline: none;" placeholder="Evaluación del involucramiento por estamento..."></textarea>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">6. Prácticas que deben institucionalizarse</label>
+            <textarea id="m2_eval_practicas" rows="3" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 13px; outline: none;" placeholder="Acciones permanentes para el reglamento o PME..."></textarea>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">7. Aspectos que requieren continuidad o mejora</label>
+            <textarea id="m2_eval_continuidad" rows="3" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 13px; outline: none;" placeholder="Brechas que se mantienen para el siguiente ciclo..."></textarea>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 700; font-size: 13px;">8. Decisiones para la siguiente etapa / Meta 3</label>
+            <textarea id="m2_eval_meta3" rows="3" style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 13px; outline: none;" placeholder="Proyecciones y compromisos para la siguiente meta..."></textarea>
+          </div>
+        </div>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -1747,6 +2164,6 @@
   </div>
 </div>
 
-<script src="logic.js?v=2.5" defer></script>
+<script src="logic.js?v=3.6" defer></script>
 </body>
 </html>

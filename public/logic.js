@@ -604,7 +604,9 @@ function goTo(page) {
   if (pageName === 'configuracion') { renderConfiguracion(); actualizarVistaLogo(); }
   if (pageName === 'evidencias') { renderEvidenciasPage(); }
   if (pageName === 'anotaciones-global') { filtrarAnotacionesGlobal(); }
+  if (pageName === 'meta2-adeco') { cargarMeta2Dashboard(); cargarMeta2Ficha(typeof meta2ActualId !== 'undefined' ? meta2ActualId : 1); cargarMeta2Evaluacion(); }
   if (pageName === 'nueva-entrevista') {
+    if (typeof cargarListaUsuariosGlobal === 'function') cargarListaUsuariosGlobal();
     const params = new URLSearchParams(queryString || '');
     const editId = params.get('edit');
     if (editId) {
@@ -776,13 +778,8 @@ async function initEstFiltros() {
     const res = await fetch('/api/estudiantes');
     const all = await res.json();
     estCursosInit = true;
-    const sel = document.getElementById('est-curso');
     const cursos = [...new Set(all.map(e => e.Curso).filter(Boolean))].sort();
-    cursos.forEach(c => {
-      const o = document.createElement('option');
-      o.value = c; o.textContent = c;
-      sel.appendChild(o);
-    });
+    popularSelectCursosOptgroups('est-curso', cursos);
   } catch (e) {
     console.error("Error loading student course filters:", e);
   }
@@ -902,6 +899,11 @@ async function filtrarEst() {
     updateEstSortHeaders();
     
     document.getElementById('est-count').textContent = `Mostrando ${rows.length} registros`;
+
+    if (typeof estModoVista !== 'undefined' && estModoVista === 'agrupado') {
+      renderEstudiantesAgrupadosMineduc(rows);
+    }
+
     const tbody = document.querySelector('#tbl-est tbody');
     tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="8" style="text-align:center;color:var(--text-muted)">No hay registros.</td></tr>' :
     rows.map(e => `<tr>
@@ -1595,7 +1597,8 @@ async function guardarEntrevista() {
     objetivo: document.getElementById('e-objetivo').value,
     motivo: document.getElementById('e-motivo').value,
     acuerdos: document.getElementById('e-acuerdos').value,
-    obs: obsVal
+    obs: obsVal,
+    participantes_relatos: JSON.stringify(typeof participantesRelatosForm !== 'undefined' ? participantesRelatosForm : [])
   };
   
   try {
@@ -1670,6 +1673,8 @@ function limpiarForm() {
   });
   currentAdjuntosList = [];
   renderAdjuntosForm();
+  participantesRelatosForm = [];
+  if (typeof renderParticipantesRelatosForm === 'function') renderParticipantesRelatosForm();
   document.getElementById('e-estado').value = 'Abierta';
   const priv = document.getElementById('e-privacidad');
   if (priv) priv.value = 'Publica';
@@ -1765,6 +1770,63 @@ function llenarReporte(e) {
       adjRow.style.display = 'none';
     }
   }
+
+  // Handle adicionales participantes / relatos
+  let partsList = [];
+  try {
+    partsList = JSON.parse(e.participantes_relatos || '[]');
+  } catch (err) {
+    partsList = [];
+  }
+
+  const pRow = document.getElementById('r-participantes-row');
+  const pList = document.getElementById('r-participantes-list');
+  const firmasCont = document.getElementById('r-firmas-container');
+
+  if (pRow && pList) {
+    if (partsList.length > 0) {
+      pRow.style.display = 'grid';
+      pList.innerHTML = partsList.map(p => `
+        <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed #cbd5e1;">
+          <strong style="color: var(--text-primary);">${esc(p.nombre)}</strong> 
+          <span style="font-size: 11px; color: var(--text-secondary); background: #e2e8f0; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">${esc(p.rol)}</span>
+          <div style="font-size: 12px; color: #334155; margin-top: 4px; font-style: italic; white-space: pre-wrap;">"${esc(p.relato || 'Sin declaración registrada')}"</div>
+        </div>
+      `).join('');
+    } else {
+      pRow.style.display = 'none';
+      pList.innerHTML = '';
+    }
+  }
+
+  if (firmasCont) {
+    let baseFirmas = `
+      <div>
+        <br><br>
+        ________________________________________<br>
+        <span style="font-size:11px; font-weight:600">Firma Entrevistador/a Responsable</span>
+      </div>
+      <div>
+        <br><br>
+        ________________________________________<br>
+        <span style="font-size:11px; font-weight:600">Firma Entrevistado/a / Apoderado/a</span>
+      </div>
+    `;
+    if (partsList.length > 0) {
+      partsList.forEach(p => {
+        if (p.nombre) {
+          baseFirmas += `
+            <div>
+              <br><br>
+              ________________________________________<br>
+              <span style="font-size:11px; font-weight:600">Firma: ${esc(p.nombre)} (${esc(p.rol)})</span>
+            </div>
+          `;
+        }
+      });
+    }
+    firmasCont.innerHTML = baseFirmas;
+  }
 }
 
 // ══ HISTORIAL ══
@@ -1792,10 +1854,24 @@ function toggleGroupRow(groupId) {
 async function filtrarHistorial() {
   const q = txt(document.getElementById('hist-q').value).toLowerCase();
   const est = document.getElementById('hist-estado').value;
+  const modoAgrupar = document.getElementById('hist-agrupar')?.value || 'ninguno';
+  const divTabla = document.getElementById('hist-contenedor-tabla');
+  const divAgrupado = document.getElementById('hist-contenedor-agrupado');
+
   try {
     const res = await fetch(`/api/entrevistas?q=${encodeURIComponent(q)}&estado=${encodeURIComponent(est)}`);
     entrevistas = await res.json();
     
+    if (modoAgrupar !== 'ninguno') {
+      if (divTabla) divTabla.style.display = 'none';
+      if (divAgrupado) divAgrupado.style.display = 'flex';
+      renderHistorialAgrupado(entrevistas, modoAgrupar);
+      return;
+    } else {
+      if (divTabla) divTabla.style.display = 'block';
+      if (divAgrupado) divAgrupado.style.display = 'none';
+    }
+
     const tbody = document.querySelector('#tbl-hist tbody');
     if (entrevistas.length === 0) {
       tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">No hay entrevistas guardadas.</td></tr>';
@@ -2035,6 +2111,13 @@ async function cargarEntrevistaParaEditarDirecto(id) {
   const adjuntoVal = e.adjunto || meta.adjunto || '';
   currentAdjuntosList = parseAdjuntos(adjuntoVal);
   renderAdjuntosForm();
+
+  try {
+    participantesRelatosForm = JSON.parse(e.participantes_relatos || '[]');
+  } catch (err) {
+    participantesRelatosForm = [];
+  }
+  if (typeof renderParticipantesRelatosForm === 'function') renderParticipantesRelatosForm();
   
   if (meta.creador) {
     document.getElementById('e-privacidad').value = 'Confidencial';
@@ -5021,6 +5104,1023 @@ function generarHtmlReporteCaminata(e, esVistaPrevia = false) {
       </div>
     </div>
   `;
+}
+
+// ══════════════ META 2 ADECO 2026 ══════════════
+const SUGERENCIAS_META2 = {
+  1: [
+    "Definir calendario anual o mensual con días, horarios, responsables y productos esperados.",
+    "Proteger tiempos para Comunidades de Aprendizaje Profesionales (CAP) y otras instancias de colaboración.",
+    "Registrar acuerdos, responsables, plazos y productos de cada sesión.",
+    "Vincular el trabajo colaborativo con PME, Plan Local de Formación y otras acciones institucionales."
+  ],
+  2: [
+    "Incorporar activamente a docentes, asistentes de la educación, PIE, Orientación y Convivencia Educativa.",
+    "Distribuir responsabilidades y roles para favorecer corresponsabilidad.",
+    "Aplicar mecanismos breves de consulta y levantamiento de opiniones.",
+    "Revisar periódicamente los niveles de participación por estamento y definir acciones frente a baja participación."
+  ],
+  3: [
+    "Complementar indicadores de asistencia y ejecución con indicadores de resultado.",
+    "Medir colaboración, confianza, comunicación, apoyo entre pares y bienestar socioemocional.",
+    "Registrar el porcentaje de acuerdos de mejora cumplidos.",
+    "Analizar periódicamente los indicadores y adoptar decisiones de ajuste basadas en evidencia."
+  ],
+  4: [
+    "Utilizar el diagnóstico 'Tu Función Me Importa' como línea base.",
+    "Aplicar instrumentos breves al inicio, durante y al cierre del proceso.",
+    "Mantener preguntas comparables para observar evolución.",
+    "Analizar los resultados con los equipos y registrar las decisiones derivadas de la información."
+  ],
+  5: [
+    "Informar avances en Consejo Escolar, Consejo de Profesores y otras instancias institucionales.",
+    "Comunicar resultados, dificultades y ajustes, no solo actividades ejecutadas.",
+    "Mostrar cómo las opiniones de los funcionarios se traducen en decisiones.",
+    "Registrar retroalimentación de la comunidad y acuerdos posteriores."
+  ]
+};
+
+var meta2ActualId = 1;
+var meta2FichasData = [];
+
+function obtenerEstadoBadgeMeta2(porcentaje) {
+  if (porcentaje === 0) return { code: 'NI', text: 'No iniciado', style: 'background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;' };
+  if (porcentaje < 30) return { code: 'D', text: 'En Diseño', style: 'background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd;' };
+  if (porcentaje < 70) return { code: 'E', text: 'En Ejecución', style: 'background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;' };
+  if (porcentaje < 100) return { code: 'S', text: 'En Seguimiento', style: 'background: #e0e7ff; color: #3730a3; border: 1px solid #a5b4fc;' };
+  return { code: 'C', text: 'Cumplido', style: 'background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7;' };
+}
+
+function cambiarTabMeta2(tab) {
+  document.querySelectorAll('.tab-btn-m2').forEach(b => {
+    b.classList.remove('active');
+    b.style.color = 'var(--text-secondary)';
+    b.style.borderBottom = 'none';
+    b.style.fontWeight = '600';
+  });
+
+  const activeBtn = document.getElementById(`tab-m2-${tab}`);
+  if (activeBtn) {
+    activeBtn.classList.add('active');
+    activeBtn.style.color = '#4f46e5';
+    activeBtn.style.borderBottom = '3px solid #4f46e5';
+    activeBtn.style.fontWeight = '700';
+  }
+
+  document.getElementById('m2-vista-panel').style.display = 'none';
+  document.getElementById('m2-vista-fichas').style.display = 'none';
+  document.getElementById('m2-vista-evaluacion').style.display = 'none';
+
+  document.getElementById(`m2-vista-${tab}`).style.display = 'block';
+}
+
+async function cargarMeta2Dashboard() {
+  try {
+    const res = await fetch('/api/meta2/fichas');
+    const fichas = await res.json();
+    meta2FichasData = fichas || [];
+
+    const tbody = document.getElementById('m2-tbody-dashboard');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    let sumaAvance = 0;
+    let totalAcuerdos = 0;
+    let totalEvidencias = 0;
+
+    meta2FichasData.forEach(rec => {
+      sumaAvance += (rec.avance || 0);
+      totalAcuerdos += (rec.acuerdos_count || 0);
+      totalEvidencias += (rec.evidencias_count || 0);
+
+      const st = obtenerEstadoBadgeMeta2(rec.avance || 0);
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="text-align: center; font-weight: 700; color: var(--text-secondary);">${rec.id}</td>
+        <td style="font-weight: 700; color: var(--text-primary);">${esc(rec.titulo)}</td>
+        <td style="color: var(--text-secondary);">${esc(rec.responsable || 'Sin asignar')}</td>
+        <td style="text-align: center;">
+          <span style="display: inline-block; padding: 4px 10px; font-size: 11px; font-weight: 800; border-radius: 6px; ${st.style}">
+            ${st.code} - ${st.text}
+          </span>
+        </td>
+        <td>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="flex: 1; height: 8px; background: #e2e8f0; border-radius: 9999px; overflow: hidden;">
+              <div style="width: ${rec.avance || 0}%; height: 100%; background: #4f46e5; border-radius: 9999px;"></div>
+            </div>
+            <span style="font-size: 12px; font-weight: 700; color: #312e81; width: 36px; text-align: right;">${rec.avance || 0}%</span>
+          </div>
+        </td>
+        <td style="text-align: center;">
+          <button type="button" class="btn btn-sm btn-primary" onclick="seleccionarYVerFichaMeta2(${rec.id})" style="padding: 4px 12px; font-size: 11.5px;">
+            ✏️ Ver Ficha
+          </button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    const promedioAvance = meta2FichasData.length > 0 ? Math.round(sumaAvance / meta2FichasData.length) : 0;
+    document.getElementById('m2-kpi-avance').innerText = `${promedioAvance}%`;
+    document.getElementById('m2-kpi-acuerdos').innerText = totalAcuerdos;
+    document.getElementById('m2-kpi-evidencias').innerText = totalEvidencias;
+  } catch (e) {
+    console.error("Error al cargar dashboard Meta2:", e);
+  }
+}
+
+function seleccionarYVerFichaMeta2(id) {
+  document.getElementById('m2-select-rec').value = id;
+  cargarMeta2Ficha(id);
+  cambiarTabMeta2('fichas');
+}
+
+async function cargarMeta2Ficha(id) {
+  meta2ActualId = parseInt(id);
+
+  // Cargar Orientaciones Sostenedor
+  const sugerenciasUl = document.getElementById('m2-orientaciones-list');
+  const sugs = SUGERENCIAS_META2[meta2ActualId] || [];
+  if (sugerenciasUl) {
+    sugerenciasUl.innerHTML = sugs.map(s => `<li>${esc(s)}</li>`).join('');
+  }
+
+  try {
+    const res = await fetch(`/api/meta2/ficha?id=${meta2ActualId}`);
+    const f = await res.json();
+
+    if (!f) return;
+
+    document.getElementById('m2-ficha-titulo').innerText = `Ficha 3.${meta2ActualId}: ${f.titulo || ''}`;
+    document.getElementById('m2_objetivo').value = f.objetivo || '';
+    document.getElementById('m2_brecha').value = f.brecha || '';
+    document.getElementById('m2_accion').value = f.accion || '';
+    document.getElementById('m2_descripcion').value = f.descripcion || '';
+    document.getElementById('m2_responsable').value = f.responsable || '';
+    document.getElementById('m2_frecuencia').value = f.frecuencia || 'Única';
+    document.getElementById('m2_fecha_inicio').value = f.fecha_inicio || '';
+    document.getElementById('m2_fecha_termino').value = f.fecha_termino || '';
+    document.getElementById('m2_ind_ejecucion').value = f.ind_ejecucion || '';
+    document.getElementById('m2_ind_resultado').value = f.ind_resultado || '';
+    document.getElementById('m2_linea_base').value = f.linea_base || '';
+    document.getElementById('m2_meta').value = f.meta || '';
+    document.getElementById('m2_avance').value = f.avance || 0;
+    document.getElementById('m2-val-avance').innerText = `${f.avance || 0}%`;
+    document.getElementById('m2_resultado_observado').value = f.resultado_observado || '';
+    document.getElementById('m2_dificultades').value = f.dificultades || '';
+    document.getElementById('m2_ajuste').value = f.ajuste || '';
+    document.getElementById('m2_responsable_ajuste').value = f.responsable_ajuste || '';
+    document.getElementById('m2_proxima_revision').value = f.proxima_revision || '';
+    document.getElementById('m2_observaciones').value = f.observaciones || '';
+
+    const estamentosArr = f.estamentos ? f.estamentos.split(',').map(s => s.trim()) : [];
+    document.querySelectorAll('.m2-chk-estamento').forEach(chk => {
+      chk.checked = estamentosArr.includes(chk.value);
+    });
+
+    renderEvidenciasFormMeta2(f.evidencias || []);
+    renderAcuerdosFormMeta2(f.acuerdos || []);
+    calcularAvanceAutomaticoMeta2(true);
+  } catch (e) {
+    console.error("Error al cargar ficha Meta2:", e);
+  }
+}
+
+function renderEvidenciasFormMeta2(evidencias) {
+  const cont = document.getElementById('m2-contenedor-evidencias');
+  if (!cont) return;
+  cont.innerHTML = '';
+  if (!evidencias || evidencias.length === 0) {
+    cont.innerHTML = '<p style="font-size: 12px; color: var(--text-muted); font-style: italic; margin: 8px 0; text-align: center;">No hay evidencias adjuntas</p>';
+    return;
+  }
+
+  evidencias.forEach(ev => {
+    const item = document.createElement('div');
+    item.style.cssText = "background: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); font-size: 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px;";
+    item.innerHTML = `
+      <div>
+        <strong style="color: var(--text-primary); font-size: 13px;">${esc(ev.nombre)}</strong>
+        <div style="color: var(--text-secondary); font-size: 11px; margin-top: 2px;">
+          <span>${esc(ev.tipo || 'Documento')}</span> ${ev.fecha ? `• ${esc(ev.fecha)}` : ''}
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        ${ev.url && ev.url !== '#' ? `<a href="${esc(ev.url)}" target="_blank" class="btn btn-sm btn-secondary" style="font-size: 11px; padding: 3px 8px;">🔗 Ver Link</a>` : ''}
+        <button type="button" class="btn btn-sm btn-danger" onclick="eliminarEvidenciaMeta2(${ev.id})" style="font-size: 11px; padding: 3px 8px;">🗑️</button>
+      </div>
+    `;
+    cont.appendChild(item);
+  });
+}
+
+function renderAcuerdosFormMeta2(acuerdos) {
+  const cont = document.getElementById('m2-contenedor-acuerdos');
+  if (!cont) return;
+  cont.innerHTML = '';
+  if (!acuerdos || acuerdos.length === 0) {
+    cont.innerHTML = '<p style="font-size: 12px; color: var(--text-muted); font-style: italic; margin: 8px 0; text-align: center;">No hay acuerdos registrados</p>';
+    return;
+  }
+
+  acuerdos.forEach(ac => {
+    const item = document.createElement('div');
+    item.style.cssText = "background: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); font-size: 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px;";
+    let estadoColor = '#d97706';
+    if (ac.estado === 'Cumplido') estadoColor = '#059669';
+    if (ac.estado === 'Pendiente') estadoColor = '#dc2626';
+
+    item.innerHTML = `
+      <div>
+        <strong style="color: var(--text-primary); font-size: 13px;">${esc(ac.acuerdo)}</strong>
+        <div style="color: var(--text-secondary); font-size: 11px; margin-top: 2px;">
+          <span>Resp: ${esc(ac.responsable || 'Por definir')}</span> ${ac.plazo ? `• Plazo: ${esc(ac.plazo)}` : ''}
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 9999px; background: rgba(0,0,0,0.05); color: ${estadoColor}; border: 1px solid ${estadoColor};">
+          ${esc(ac.estado || 'En ejecución')}
+        </span>
+        <button type="button" class="btn btn-sm btn-danger" onclick="eliminarAcuerdoMeta2(${ac.id})" style="font-size: 11px; padding: 3px 8px;">🗑️</button>
+      </div>
+    `;
+    cont.appendChild(item);
+  });
+}
+
+async function guardarMeta2Ficha(e) {
+  if (e) e.preventDefault();
+
+  const estamentosSel = Array.from(document.querySelectorAll('.m2-chk-estamento:checked')).map(c => c.value).join(', ');
+
+  const payload = {
+    id: meta2ActualId,
+    objetivo: document.getElementById('m2_objetivo').value.trim(),
+    brecha: document.getElementById('m2_brecha').value.trim(),
+    accion: document.getElementById('m2_accion').value.trim(),
+    descripcion: document.getElementById('m2_descripcion').value.trim(),
+    responsable: document.getElementById('m2_responsable').value.trim(),
+    frecuencia: document.getElementById('m2_frecuencia').value,
+    fecha_inicio: document.getElementById('m2_fecha_inicio').value,
+    fecha_termino: document.getElementById('m2_fecha_termino').value,
+    estamentos: estamentosSel,
+    ind_ejecucion: document.getElementById('m2_ind_ejecucion').value.trim(),
+    ind_resultado: document.getElementById('m2_ind_resultado').value.trim(),
+    linea_base: document.getElementById('m2_linea_base').value.trim(),
+    meta: document.getElementById('m2_meta').value.trim(),
+    avance: parseInt(document.getElementById('m2_avance').value || 0),
+    resultado_observado: document.getElementById('m2_resultado_observado').value.trim(),
+    dificultades: document.getElementById('m2_dificultades').value.trim(),
+    ajuste: document.getElementById('m2_ajuste').value.trim(),
+    responsable_ajuste: document.getElementById('m2_responsable_ajuste').value.trim(),
+    proxima_revision: document.getElementById('m2_proxima_revision').value,
+    observaciones: document.getElementById('m2_observaciones').value.trim()
+  };
+
+  try {
+    const res = await fetch('/api/meta2/ficha', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      await cargarMeta2Dashboard();
+      toast(`✅ Ficha ${meta2ActualId} guardada correctamente`);
+    } else {
+      toast(`❌ Error al guardar ficha: ${data.error}`);
+    }
+  } catch (err) {
+    console.error("Error al guardar ficha:", err);
+    toast("❌ Error de red al guardar la ficha");
+  }
+}
+
+async function agregarEvidenciaMeta2() {
+  const nombre = prompt("Nombre o descripción de la evidencia (Ej: Acta N°2 CAP, Lista de Asistencia):");
+  if (!nombre) return;
+  const tipo = prompt("Tipo de evidencia (ej. Documento, Acta, Foto, Google Drive):", "Documento");
+  const url = prompt("Enlace o URL de la evidencia (opcional):", "#");
+
+  try {
+    const res = await fetch('/api/meta2/evidencia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recomendacion_id: meta2ActualId,
+        nombre: nombre,
+        tipo: tipo || "Documento",
+        fecha: new Date().toISOString().slice(0, 10),
+        url: url || "#"
+      })
+    });
+    if (res.ok) {
+      await cargarMeta2Ficha(meta2ActualId);
+      await cargarMeta2Dashboard();
+      toast("📎 Evidencia agregada correctamente");
+    }
+  } catch (e) {
+    console.error("Error al agregar evidencia:", e);
+  }
+}
+
+async function eliminarEvidenciaMeta2(id) {
+  if (!confirm("¿Desea eliminar esta evidencia?")) return;
+  try {
+    const res = await fetch('/api/meta2/evidencia/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id })
+    });
+    if (res.ok) {
+      await cargarMeta2Ficha(meta2ActualId);
+      await cargarMeta2Dashboard();
+      toast("🗑️ Evidencia eliminada");
+    }
+  } catch (e) {
+    console.error("Error al eliminar evidencia:", e);
+  }
+}
+
+async function agregarAcuerdoMeta2() {
+  const desc = prompt("Descripción del acuerdo alcanzado:");
+  if (!desc) return;
+  const resp = prompt("Responsable del acuerdo:", "UTP");
+  const plazo = prompt("Fecha / Plazo del acuerdo (AAAA-MM-DD):", new Date().toISOString().slice(0, 10));
+
+  try {
+    const res = await fetch('/api/meta2/acuerdo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recomendacion_id: meta2ActualId,
+        acuerdo: desc,
+        responsable: resp || "Por definir",
+        plazo: plazo || "",
+        estado: "En ejecución",
+        observacion: ""
+      })
+    });
+    if (res.ok) {
+      await cargarMeta2Ficha(meta2ActualId);
+      await cargarMeta2Dashboard();
+      toast("✅ Acuerdo registrado correctamente");
+    }
+  } catch (e) {
+    console.error("Error al agregar acuerdo:", e);
+  }
+}
+
+async function eliminarAcuerdoMeta2(id) {
+  if (!confirm("¿Desea eliminar este acuerdo?")) return;
+  try {
+    const res = await fetch('/api/meta2/acuerdo/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id })
+    });
+    if (res.ok) {
+      await cargarMeta2Ficha(meta2ActualId);
+      await cargarMeta2Dashboard();
+      toast("🗑️ Acuerdo eliminado");
+    }
+  } catch (e) {
+    console.error("Error al eliminar acuerdo:", e);
+  }
+}
+
+async function cargarMeta2Evaluacion() {
+  try {
+    const res = await fetch('/api/meta2/evaluacion');
+    const ev = await res.json();
+    if (ev) {
+      document.getElementById('m2_eval_logros').value = ev.logros || '';
+      document.getElementById('m2_eval_colaborativo').value = ev.colaborativo || '';
+      document.getElementById('m2_eval_bienestar').value = ev.bienestar || '';
+      document.getElementById('m2_eval_comunicacion').value = ev.comunicacion || '';
+      document.getElementById('m2_eval_participacion').value = ev.participacion || '';
+      document.getElementById('m2_eval_practicas').value = ev.practicas || '';
+      document.getElementById('m2_eval_continuidad').value = ev.continuidad || '';
+      document.getElementById('m2_eval_meta3').value = ev.meta3 || '';
+    }
+  } catch (e) {
+    console.error("Error al cargar evaluación Meta2:", e);
+  }
+}
+
+async function guardarMeta2Evaluacion(e) {
+  if (e) e.preventDefault();
+
+  const payload = {
+    logros: document.getElementById('m2_eval_logros').value.trim(),
+    colaborativo: document.getElementById('m2_eval_colaborativo').value.trim(),
+    bienestar: document.getElementById('m2_eval_bienestar').value.trim(),
+    comunicacion: document.getElementById('m2_eval_comunicacion').value.trim(),
+    participacion: document.getElementById('m2_eval_participacion').value.trim(),
+    practicas: document.getElementById('m2_eval_practicas').value.trim(),
+    continuidad: document.getElementById('m2_eval_continuidad').value.trim(),
+    meta3: document.getElementById('m2_eval_meta3').value.trim()
+  };
+
+  try {
+    const res = await fetch('/api/meta2/evaluacion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast("🏆 Evaluación Consolidada guardada exitosamente");
+    } else {
+      toast(`❌ Error al guardar evaluación: ${data.error}`);
+    }
+  } catch (err) {
+    console.error("Error al guardar evaluación:", err);
+    toast("❌ Error de red al guardar la evaluación");
+  }
+}
+
+function calcularAvanceAutomaticoMeta2(silent = false) {
+  // 1. Campos Estratégicos (Max 20%)
+  const obj = (document.getElementById('m2_objetivo')?.value || '').trim();
+  const bre = (document.getElementById('m2_brecha')?.value || '').trim();
+  const acc = (document.getElementById('m2_accion')?.value || '').trim();
+  const res = (document.getElementById('m2_responsable')?.value || '').trim();
+  const fini = document.getElementById('m2_fecha_inicio')?.value;
+  const fter = document.getElementById('m2_fecha_termino')?.value;
+  const ests = document.querySelectorAll('.m2-chk-estamento:checked').length;
+  
+  let pEstrategia = 0;
+  if (obj) pEstrategia += 4;
+  if (bre) pEstrategia += 3;
+  if (acc) pEstrategia += 4;
+  if (res) pEstrategia += 3;
+  if (fini && fter) pEstrategia += 3;
+  if (ests > 0) pEstrategia += 3;
+  if (pEstrategia > 20) pEstrategia = 20;
+
+  // 2. Indicadores (Max 20%)
+  const iej = (document.getElementById('m2_ind_ejecucion')?.value || '').trim();
+  const ires = (document.getElementById('m2_ind_resultado')?.value || '').trim();
+  const lbase = (document.getElementById('m2_linea_base')?.value || '').trim();
+  const meta = (document.getElementById('m2_meta')?.value || '').trim();
+  
+  let pIndicadores = 0;
+  if (iej) pIndicadores += 5;
+  if (ires) pIndicadores += 5;
+  if (lbase) pIndicadores += 5;
+  if (meta) pIndicadores += 5;
+
+  // 3. Evidencias Cargadas (Max 20%)
+  const evidenciasDivs = document.querySelectorAll('#m2-contenedor-evidencias > div');
+  let pEvidencias = 0;
+  const countEvidencias = Array.from(evidenciasDivs).filter(d => !d.innerText.includes('No hay evidencias')).length;
+  if (countEvidencias > 0) {
+    pEvidencias = Math.min(20, countEvidencias * 10);
+  }
+
+  // 4. Acuerdos Cumplidos (Max 30%)
+  const acuerdosDivs = document.querySelectorAll('#m2-contenedor-acuerdos > div');
+  let pAcuerdos = 0;
+  const validAcuerdos = Array.from(acuerdosDivs).filter(d => !d.innerText.includes('No hay acuerdos'));
+  if (validAcuerdos.length > 0) {
+    let cumplidos = 0;
+    validAcuerdos.forEach(el => {
+      if (el.innerText.includes('Cumplido')) cumplidos++;
+    });
+    pAcuerdos = Math.round((cumplidos / validAcuerdos.length) * 30);
+  }
+
+  // 5. Resultado y Ajustes (Max 10%)
+  const resObs = (document.getElementById('m2_resultado_observado')?.value || '').trim();
+  const ajus = (document.getElementById('m2_ajuste')?.value || '').trim();
+  let pResultado = 0;
+  if (resObs) pResultado += 5;
+  if (ajus) pResultado += 5;
+
+  const totalAvance = Math.min(100, pEstrategia + pIndicadores + pEvidencias + pAcuerdos + pResultado);
+
+  // Actualizar slider y texto
+  const rangeInput = document.getElementById('m2_avance');
+  const valStrong = document.getElementById('m2-val-avance');
+  if (rangeInput) rangeInput.value = totalAvance;
+  if (valStrong) valStrong.innerText = `${totalAvance}%`;
+
+  // Actualizar desglose visual
+  const desgloseEl = document.getElementById('m2-desglose-avance');
+  if (desgloseEl) {
+    desgloseEl.innerHTML = `
+      <span>🎯 Planificación: <strong>${pEstrategia}/20%</strong></span>
+      <span>📊 Indicadores: <strong>${pIndicadores}/20%</strong></span>
+      <span>📎 Evidencias: <strong>${pEvidencias}/20%</strong></span>
+      <span>✅ Acuerdos: <strong>${pAcuerdos}/30%</strong></span>
+      <span>📝 Resultado: <strong>${pResultado}/10%</strong></span>
+    `;
+  }
+
+  if (!silent) {
+    toast(`⚡ Avance calculated automatically: ${totalAvance}%`);
+  }
+}
+
+// ══════════════ CLASIFICADOR Y AGRUPACIÓN POR NIVEL MINEDUC ══════════════
+function obtenerNivelMineduc(cursoStr) {
+  if (!cursoStr) return { code: '999', name: 'Sin Clasificar', label: 'Sin Clasificar' };
+  const c = cursoStr.toLowerCase().trim();
+  
+  if (c.includes('pre-kinder') || c.includes('prekinder') || c.includes('transición') || c.includes('transicion 1') || c.includes('nt1')) {
+    return { code: '10', name: 'Educación Parvularia', label: '10 Educación Parvularia' };
+  }
+  if (c.includes('kinder') || c.includes('nt2')) {
+    return { code: '10', name: 'Educación Parvularia', label: '10 Educación Parvularia' };
+  }
+  if (c.includes('básico') || c.includes('basico') || c.includes('básica') || c.includes('basica') || /^[1-8][°|o]?\s*b/i.test(c)) {
+    return { code: '110', name: 'Enseñanza Básica', label: '110 Enseñanza Básica' };
+  }
+  if (c.includes('laboral') || c.includes('opción 4') || c.includes('opcion 4')) {
+    return { code: '299', name: 'Programa Integración Escolar (PIE) Opción 4', label: '299 Programa Integración Escolar (PIE) Opción 4' };
+  }
+  if (c.includes('industrial') || c.includes('mecanica') || c.includes('mecánica') || c.includes('electricidad')) {
+    return { code: '510', name: 'Enseñanza Media Técnico-Profesional Industrial', label: '510 Enseñanza Media Técnico-Profesional Industrial' };
+  }
+  if (c.includes('técnica') || c.includes('tecnica') || c.includes('servicios') || c.includes('pulo')) {
+    return { code: '610', name: 'Enseñanza Media Técnico-Profesional Técnica', label: '610 Enseñanza Media Técnico-Profesional Técnica' };
+  }
+  if (c.includes('medio') || c.includes('media') || /^[1-4][°|o]?\s*m/i.test(c)) {
+    return { code: '310', name: 'Enseñanza Media Humanista-Científica', label: '310 Enseñanza Media Humanista-Científica' };
+  }
+  
+  return { code: '999', name: 'Otros / General', label: 'Otros / General' };
+}
+
+function popularSelectCursosOptgroups(selectId, cursosList) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="">Todos los cursos</option>';
+  
+  const grupos = {};
+  cursosList.forEach(c => {
+    const info = obtenerNivelMineduc(c);
+    if (!grupos[info.label]) grupos[info.label] = [];
+    grupos[info.label].push(c);
+  });
+
+  const ordenCodigos = [
+    '10 Educación Parvularia',
+    '110 Enseñanza Básica',
+    '299 Programa Integración Escolar (PIE) Opción 4',
+    '310 Enseñanza Media Humanista-Científica',
+    '510 Enseñanza Media Técnico-Profesional Industrial',
+    '610 Enseñanza Media Técnico-Profesional Técnica',
+    'Otros / General'
+  ];
+
+  ordenCodigos.forEach(label => {
+    if (grupos[label] && grupos[label].length > 0) {
+      const optgroup = document.createElement('optgroup');
+      optgroup.label = label;
+      grupos[label].sort().forEach(c => {
+        const o = document.createElement('option');
+        o.value = c;
+        o.textContent = c;
+        optgroup.appendChild(o);
+      });
+      sel.appendChild(optgroup);
+    }
+  });
+
+  for (const label in grupos) {
+    if (!ordenCodigos.includes(label) && grupos[label].length > 0) {
+      const optgroup = document.createElement('optgroup');
+      optgroup.label = label;
+      grupos[label].sort().forEach(c => {
+        const o = document.createElement('option');
+        o.value = c;
+        o.textContent = c;
+        optgroup.appendChild(o);
+      });
+      sel.appendChild(optgroup);
+    }
+  }
+
+  sel.value = currentVal;
+}
+
+let estModoVista = 'tabla';
+
+function cambiarModoVistaEstudiantes(modo) {
+  estModoVista = modo;
+  const btnTabla = document.getElementById('btn-est-mode-tabla');
+  const btnAgrupado = document.getElementById('btn-est-mode-agrupado');
+  const divTabla = document.getElementById('est-contenedor-tabla');
+  const divAgrupado = document.getElementById('est-contenedor-agrupado');
+
+  if (modo === 'agrupado') {
+    if (btnTabla) { btnTabla.className = 'btn btn-sm btn-secondary'; }
+    if (btnAgrupado) { btnAgrupado.className = 'btn btn-sm btn-primary'; }
+    if (divTabla) divTabla.style.display = 'none';
+    if (divAgrupado) divAgrupado.style.display = 'flex';
+  } else {
+    if (btnTabla) { btnTabla.className = 'btn btn-sm btn-primary'; }
+    if (btnAgrupado) { btnAgrupado.className = 'btn btn-sm btn-secondary'; }
+    if (divTabla) divTabla.style.display = 'block';
+    if (divAgrupado) divAgrupado.style.display = 'none';
+  }
+  filtrarEst();
+}
+
+function renderEstudiantesAgrupadosMineduc(estudiantesRows) {
+  const cont = document.getElementById('est-contenedor-agrupado');
+  if (!cont) return;
+  cont.innerHTML = '';
+
+  if (!estudiantesRows || estudiantesRows.length === 0) {
+    cont.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--text-secondary);">No se encontraron estudiantes para los filtros aplicados.</div>';
+    return;
+  }
+
+  const nivelesMap = {};
+  const ordenCodigos = [
+    '10 Educación Parvularia',
+    '110 Enseñanza Básica',
+    '299 Programa Integración Escolar (PIE) Opción 4',
+    '310 Enseñanza Media Humanista-Científica',
+    '510 Enseñanza Media Técnico-Profesional Industrial',
+    '610 Enseñanza Media Técnico-Profesional Técnica',
+    'Otros / General'
+  ];
+
+  estudiantesRows.forEach(e => {
+    const info = obtenerNivelMineduc(e.Curso);
+    const lvlKey = info.label;
+    if (!nivelesMap[lvlKey]) nivelesMap[lvlKey] = { label: lvlKey, cursosMap: {}, total: 0 };
+    
+    const curKey = txt(e.Curso) || 'Sin Curso';
+    if (!nivelesMap[lvlKey].cursosMap[curKey]) nivelesMap[lvlKey].cursosMap[curKey] = [];
+    nivelesMap[lvlKey].cursosMap[curKey].push(e);
+    nivelesMap[lvlKey].total++;
+  });
+
+  ordenCodigos.forEach(lvlKey => {
+    if (nivelesMap[lvlKey]) {
+      const lvlData = nivelesMap[lvlKey];
+      const card = document.createElement('div');
+      card.style.cssText = "background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; box-shadow: var(--shadow-sm);";
+
+      let cursosHtml = '';
+      Object.keys(lvlData.cursosMap).sort().forEach(cName => {
+        const estList = lvlData.cursosMap[cName];
+        cursosHtml += `
+          <div style="background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 6px; padding: 10px 14px; font-weight: 600; font-size: 13px; color: #3730a3; display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="filtrarEstPorCursoClick('${esc(cName)}')">
+            <span>🏫 ${esc(cName)}</span>
+            <span style="background: #3730a3; color: #fff; padding: 2px 8px; border-radius: 9999px; font-size: 11px;">${estList.length} est.</span>
+          </div>
+        `;
+      });
+
+      card.innerHTML = `
+        <div style="background: linear-gradient(90deg, #1d4ed8 0%, #2563eb 100%); color: #fff; padding: 12px 18px; font-weight: 700; font-size: 14px; display: flex; justify-content: space-between; align-items: center;">
+          <span>📁 ${esc(lvlData.label)}</span>
+          <span style="background: rgba(255,255,255,0.2); padding: 3px 10px; border-radius: 6px; font-size: 12px;">${lvlData.total} estudiantes</span>
+        </div>
+        <div style="padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; background: #f8fafc;">
+          ${cursosHtml}
+        </div>
+      `;
+      cont.appendChild(card);
+    }
+  });
+}
+
+function filtrarEstPorCursoClick(cursoName) {
+  document.getElementById('est-curso').value = cursoName;
+  cambiarModoVistaEstudiantes('tabla');
+}
+
+// ══════════════ PARTICIPANTES ADICIONALES Y RELATOS ══════════════
+let participantesRelatosForm = [];
+let listaUsuariosGlobal = [];
+
+async function cargarListaUsuariosGlobal() {
+  try {
+    const res = await fetch('/api/usuarios');
+    listaUsuariosGlobal = await res.json();
+    
+    let dl = document.getElementById('dl-usuarios-global');
+    if (!dl) {
+      dl = document.createElement('datalist');
+      dl.id = 'dl-usuarios-global';
+      document.body.appendChild(dl);
+    }
+    dl.innerHTML = listaUsuariosGlobal.map(u => `<option value="${esc(u.nombre)}">${esc(u.nombre)} (${esc(u.username)} - ${esc(u.perfil)})</option>`).join('');
+    
+    const eResp = document.getElementById('e-resp');
+    if (eResp) eResp.setAttribute('list', 'dl-usuarios-global');
+  } catch (err) {
+    console.error("Error al cargar lista de usuarios global:", err);
+  }
+}
+
+function agregarParticipanteRelatoForm() {
+  participantesRelatosForm.push({
+    nombre: '',
+    rol: 'Apoderado/a',
+    relato: ''
+  });
+  renderParticipantesRelatosForm();
+}
+
+function eliminarParticipanteRelatoForm(idx) {
+  participantesRelatosForm.splice(idx, 1);
+  renderParticipantesRelatosForm();
+}
+
+function seleccionarFuncionarioRelato(idx, val) {
+  if (val === 'CUSTOM') {
+    renderParticipantesRelatosForm();
+    return;
+  }
+  const found = listaUsuariosGlobal.find(u => u.nombre === val || u.username === val);
+  if (found) {
+    participantesRelatosForm[idx].nombre = found.nombre;
+    if (found.perfil && found.perfil.includes('Docente')) participantesRelatosForm[idx].rol = 'Profesor/a Asignatura';
+  } else if (val) {
+    participantesRelatosForm[idx].nombre = val;
+  }
+  renderParticipantesRelatosForm();
+}
+
+function renderParticipantesRelatosForm() {
+  const cont = document.getElementById('e-participantes-relatos-list');
+  if (!cont) return;
+  cont.innerHTML = '';
+  
+  if (participantesRelatosForm.length === 0) {
+    cont.innerHTML = '<p style="font-size: 12px; color: #0284c7; font-style: italic; margin: 4px 0;">No se han agregado participantes adicionales aún. Haga clic en "+ Agregar Participante / Relato" si desea registrar el testimonio de otra persona.</p>';
+    return;
+  }
+
+  participantesRelatosForm.forEach((p, idx) => {
+    const card = document.createElement('div');
+    card.style.cssText = 'background: #fff; padding: 14px; border-radius: 8px; border: 1px solid #7dd3fc; display: flex; flex-direction: column; gap: 10px;';
+    
+    const esFuncionarioConocido = listaUsuariosGlobal.some(u => u.nombre === p.nombre);
+
+    card.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+          <div style="flex: 2; min-width: 220px;">
+            <label style="font-size: 11.5px; font-weight: 700; color: #0369a1; margin-bottom: 4px; display: block;">
+              👤 Seleccionar Funcionario / Usuario del Liceo (Relator):
+            </label>
+            <select onchange="seleccionarFuncionarioRelato(${idx}, this.value)" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; background: #f8fafc; font-weight: 600; color: #1e1b4b;">
+              <option value="">-- Seleccionar Funcionario Registrado --</option>
+              ${listaUsuariosGlobal.map(u => `<option value="${esc(u.nombre)}" ${p.nombre === u.nombre ? 'selected' : ''}>${esc(u.nombre)} (${esc(u.username)})</option>`).join('')}
+              <option value="CUSTOM" ${!esFuncionarioConocido && p.nombre ? 'selected' : ''}>-- Escribir Nombre Personalizado (Ej: Apoderado / Externo) --</option>
+            </select>
+          </div>
+
+          <div style="flex: 1; min-width: 150px;">
+            <label style="font-size: 11.5px; font-weight: 700; color: #0369a1; margin-bottom: 4px; display: block;">
+              🏷️ Rol / Vínculo:
+            </label>
+            <select onchange="participantesRelatosForm[${idx}].rol = this.value" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; outline: none;">
+              <option value="Profesor/a Jefe" ${p.rol === 'Profesor/a Jefe' ? 'selected' : ''}>Profesor/a Jefe</option>
+              <option value="Profesor/a Asignatura" ${p.rol === 'Profesor/a Asignatura' ? 'selected' : ''}>Profesor/a Asignatura</option>
+              <option value="Convivencia Escolar" ${p.rol === 'Convivencia Escolar' ? 'selected' : ''}>Convivencia Escolar</option>
+              <option value="Psicólogo/a PIE" ${p.rol === 'Psicólogo/a PIE' ? 'selected' : ''}>Psicólogo/a PIE</option>
+              <option value="Inspector/a" ${p.rol === 'Inspector/a' ? 'selected' : ''}>Inspector/a</option>
+              <option value="Apoderado/a" ${p.rol === 'Apoderado/a' ? 'selected' : ''}>Apoderado/a</option>
+              <option value="Testigo / Compañero" ${p.rol === 'Testigo / Compañero' ? 'selected' : ''}>Testigo / Compañero/a</option>
+              <option value="Otro" ${p.rol === 'Otro' ? 'selected' : ''}>Otro</option>
+            </select>
+          </div>
+
+          <button type="button" class="btn btn-sm btn-danger" onclick="eliminarParticipanteRelatoForm(${idx})" style="padding: 6px 12px; font-size: 12px; margin-bottom: 1px;">🗑️ Quitar</button>
+        </div>
+
+        <div>
+          <label style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 3px; display: block;">Nombre Completo del Relator / Participante:</label>
+          <input type="text" value="${esc(p.nombre)}" onchange="participantesRelatosForm[${idx}].nombre = this.value" placeholder="Escriba o confirme el nombre completo..." style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; outline: none;">
+        </div>
+
+        <div>
+          <label style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 3px; display: block;">Declaración, Aporte o Relato de la Persona:</label>
+          <textarea rows="2" onchange="participantesRelatosForm[${idx}].relato = this.value" placeholder="Escriba la declaración, testimonio o relato expresado por esta persona durante la entrevista..." style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; outline: none; resize: vertical;">${esc(p.relato)}</textarea>
+        </div>
+      </div>
+    `;
+    cont.appendChild(card);
+  });
+}
+
+// ══════════════ RENDERING HISTORIAL AGRUPADO (CURSO / ESTAMENTO) ══════════════
+function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
+  const cont = document.getElementById('hist-contenedor-agrupado');
+  if (!cont) return;
+  cont.innerHTML = '';
+
+  if (!entrevistasRows || entrevistasRows.length === 0) {
+    cont.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--text-secondary);">No hay entrevistas registradas para los filtros seleccionados.</div>';
+    return;
+  }
+
+  const gruposMap = {};
+
+  entrevistasRows.forEach(e => {
+    let key = 'Sin Clasificar';
+    if (modoAgrupar === 'curso') {
+      key = txt(e.curso) || 'Sin Curso / Función';
+    } else if (modoAgrupar === 'estamento') {
+      key = txt(e.cargo) || 'Estudiante';
+    }
+    if (!gruposMap[key]) gruposMap[key] = [];
+    gruposMap[key].push(e);
+  });
+
+  const sortedKeys = Object.keys(gruposMap).sort();
+
+  sortedKeys.forEach((groupKey, gIdx) => {
+    const items = gruposMap[groupKey];
+    const groupCard = document.createElement('div');
+    groupCard.style.cssText = "background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; box-shadow: var(--shadow-sm);";
+
+    const uniqueGId = `hist-group-${gIdx}`;
+
+    let rowsHtml = '';
+    
+    // Group items by RUT inside this course/estamento
+    const estudiantesMap = {};
+    items.forEach(e => {
+      const rKey = (txt(e.rut) || 'SIN_RUT').toUpperCase();
+      if (!estudiantesMap[rKey]) {
+        estudiantesMap[rKey] = {
+          rut: e.rut,
+          nombre: e.nombre,
+          interviews: []
+        };
+      }
+      estudiantesMap[rKey].interviews.push(e);
+    });
+
+    Object.values(estudiantesMap).forEach((estObj, estIdx) => {
+      const subGId = `${uniqueGId}-sub-${estIdx}`;
+      const totalEnts = estObj.interviews.length;
+      estObj.interviews.sort((a, b) => b.id.localeCompare(a.id));
+
+      if (totalEnts === 1) {
+        const e = estObj.interviews[0];
+        let badgeColor = 'var(--primary)';
+        if (e.estado === 'Cerrada') badgeColor = '#059669';
+        if (e.estado === 'En seguimiento') badgeColor = '#d97706';
+
+        rowsHtml += `
+          <tr style="border-bottom: 1px solid var(--border);">
+            <td style="font-family: monospace; font-weight: 700; font-size: 12px; color: var(--text-secondary); padding: 8px 12px;">${esc(e.id)}</td>
+            <td style="font-size: 12px; padding: 8px 12px;">${esc(e.fecha)}</td>
+            <td style="font-family: monospace; font-size: 12px; padding: 8px 12px;">${esc(e.rut)}</td>
+            <td style="font-weight: 700; padding: 8px 12px;">${esc(e.nombre)}</td>
+            <td style="font-size: 12px; color: var(--text-secondary); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 8px 12px;">${esc(e.objetivo || 'Sin objetivo')}</td>
+            <td style="font-size: 12px; color: var(--text-secondary); padding: 8px 12px;">${esc(e.resp || '')}</td>
+            <td style="padding: 8px 12px;"><span style="font-size: 11px; font-weight: 700; color: ${badgeColor}; padding: 2px 8px; border-radius: 9999px; background: rgba(0,0,0,0.04);">${esc(e.estado || '')}</span></td>
+            <td style="text-align: right; padding: 8px 12px;">
+              <button class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditarDirecto('${esc(e.id)}')" style="padding: 3px 8px; font-size: 11px;">✏️ Editar</button>
+              <button class="btn btn-sm btn-secondary" onclick="imprimirDirectoEntrevista('${esc(e.id)}')" style="padding: 3px 8px; font-size: 11px;">🖨️ Ver Ficha</button>
+            </td>
+          </tr>
+        `;
+      } else {
+        rowsHtml += `
+          <tr class="subgroup-header" onclick="toggleHistorialSubGroup('${subGId}')" style="background-color: #eef2ff; cursor: pointer; font-weight: 600; border-bottom: 1px solid #c7d2fe;">
+            <td colspan="3" style="padding: 8px 12px; font-family: monospace; font-size: 12px; font-weight: 700; color: #3730a3;">
+              <span id="subarrow-${subGId}" style="transition: transform 0.2s; display: inline-block; transform: rotate(90deg); margin-right: 6px; font-size: 11px;">▶</span>
+              RUT: ${esc(estObj.rut)}
+            </td>
+            <td colspan="2" style="padding: 8px 12px; font-weight: 700; color: #1e1b4b;">
+              👤 ${esc(estObj.nombre)}
+            </td>
+            <td colspan="2" style="padding: 8px 12px;">
+              <span style="background: #3730a3; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">${totalEnts} ENTREVISTAS</span>
+            </td>
+            <td style="text-align: right; padding: 8px 12px;">
+              <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); imprimirEntrevistasPersona('${esc(estObj.rut)}')" style="padding: 3px 8px; font-size: 11px; font-weight: 700;">🖨️ Imprimir Persona (${totalEnts})</button>
+            </td>
+          </tr>
+        `;
+
+        estObj.interviews.forEach(e => {
+          let badgeColor = 'var(--primary)';
+          if (e.estado === 'Cerrada') badgeColor = '#059669';
+          if (e.estado === 'En seguimiento') badgeColor = '#d97706';
+
+          rowsHtml += `
+            <tr class="subrow-${subGId}" style="border-bottom: 1px solid var(--border); background-color: #ffffff;">
+              <td style="font-family: monospace; font-weight: 700; font-size: 12px; color: var(--text-secondary); padding: 8px 12px 8px 24px;">${esc(e.id)}</td>
+              <td style="font-size: 12px; padding: 8px 12px;">${esc(e.fecha)}</td>
+              <td style="font-family: monospace; font-size: 12px; padding: 8px 12px;">${esc(e.rut)}</td>
+              <td style="font-weight: 600; padding: 8px 12px; color: #475569;">${esc(e.nombre)}</td>
+              <td style="font-size: 12px; color: var(--text-secondary); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 8px 12px;">${esc(e.objetivo || 'Sin objetivo')}</td>
+              <td style="font-size: 12px; color: var(--text-secondary); padding: 8px 12px;">${esc(e.resp || '')}</td>
+              <td style="padding: 8px 12px;"><span style="font-size: 11px; font-weight: 700; color: ${badgeColor}; padding: 2px 8px; border-radius: 9999px; background: rgba(0,0,0,0.04);">${esc(e.estado || '')}</span></td>
+              <td style="text-align: right; padding: 8px 12px;">
+                <button class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditarDirecto('${esc(e.id)}')" style="padding: 3px 8px; font-size: 11px;">✏️ Editar</button>
+                <button class="btn btn-sm btn-secondary" onclick="imprimirDirectoEntrevista('${esc(e.id)}')" style="padding: 3px 8px; font-size: 11px;">🖨️ Ver Ficha</button>
+              </td>
+            </tr>
+          `;
+        });
+      }
+    });
+
+    groupCard.innerHTML = `
+      <div style="background: var(--bg-body, #f8fafc); padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleHistorialAcordeon('${uniqueGId}')">
+        <div style="display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; color: var(--text-primary);">
+          <span id="arrow-${uniqueGId}" style="transition: transform 0.2s; display: inline-block;">▼</span>
+          <span>${modoAgrupar === 'curso' ? '🏫 Curso / Función' : '👥 Estamento'}: <strong style="color: #4f46e5;">${esc(groupKey)}</strong></span>
+          <span style="background: #4f46e5; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 9999px; margin-left: 4px;">${items.length} entrevistas</span>
+        </div>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); imprimirGrupoEntrevistas('${esc(groupKey)}', '${modoAgrupar}')" style="font-size: 11.5px; font-weight: 700;">
+          🖨️ Imprimir Grupo
+        </button>
+      </div>
+      <div id="content-${uniqueGId}" class="tbl-wrap" style="display: block; padding: 0;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: #f1f5f9; font-size: 12px; text-align: left; border-bottom: 1px solid var(--border);">
+              <th style="padding: 8px 12px;">ID</th>
+              <th style="padding: 8px 12px;">Fecha</th>
+              <th style="padding: 8px 12px;">RUT</th>
+              <th style="padding: 8px 12px;">Nombre</th>
+              <th style="padding: 8px 12px;">Objetivo</th>
+              <th style="padding: 8px 12px;">Responsable</th>
+              <th style="padding: 8px 12px;">Estado</th>
+              <th style="padding: 8px 12px; text-align: right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    `;
+    cont.appendChild(groupCard);
+  });
+}
+
+function toggleHistorialAcordeon(gId) {
+  const content = document.getElementById(`content-${gId}`);
+  const arrow = document.getElementById(`arrow-${gId}`);
+  if (content) {
+    if (content.style.display === 'none') {
+      content.style.display = 'block';
+      if (arrow) arrow.style.transform = 'rotate(0deg)';
+    } else {
+      content.style.display = 'none';
+      if (arrow) arrow.style.transform = 'rotate(-90deg)';
+    }
+  }
+}
+
+function imprimirGrupoEntrevistas(groupKey, modoAgrupar) {
+  const filtradas = entrevistas.filter(e => {
+    if (modoAgrupar === 'curso') return (txt(e.curso) || 'Sin Curso / Función') === groupKey;
+    if (modoAgrupar === 'estamento') return (txt(e.cargo) || 'Estudiante') === groupKey;
+    return false;
+  });
+  if (filtradas.length === 0) return;
+  const ids = filtradas.map(e => e.id).join(',');
+  goTo(`reporte?ids=${ids}`);
+}
+
+function toggleHistorialSubGroup(subGId) {
+  const rows = document.querySelectorAll('.subrow-' + subGId);
+  const arrow = document.getElementById('subarrow-' + subGId);
+  rows.forEach(r => {
+    if (r.style.display === 'none') {
+      r.style.display = 'table-row';
+    } else {
+      r.style.display = 'none';
+    }
+  });
+  if (arrow) {
+    if (arrow.style.transform === 'rotate(90deg)') {
+      arrow.style.transform = 'rotate(0deg)';
+    } else {
+      arrow.style.transform = 'rotate(90deg)';
+    }
+  }
+}
+
+function imprimirEntrevistasPersona(rutPersona) {
+  const cleanRut = (txt(rutPersona) || '').toUpperCase();
+  const filtradas = entrevistas.filter(e => (txt(e.rut) || '').toUpperCase() === cleanRut);
+  if (filtradas.length === 0) return;
+  const ids = filtradas.map(e => e.id).join(',');
+  goTo(`reporte?ids=${ids}`);
 }
 
 
