@@ -626,7 +626,7 @@ function goTo(page) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
   
   if (pageName === 'inicio') { buscarGlobal(); loadAllData(); }
-  if (pageName === 'estudiantes') { initEstFiltros(); filtrarEst(); populateProfesorJefeDropdowns(); }
+  if (pageName === 'estudiantes') { initEstFiltros(); cambiarModoVistaEstudiantes(typeof estModoVista !== 'undefined' ? estModoVista : 'agrupado'); populateProfesorJefeDropdowns(); }
   if (pageName === 'docentes') { initDocFiltros(); filtrarDoc(); }
   if (pageName === 'asistentes') { initAsiFiltros(); filtrarAsi(); }
   if (pageName === 'historial') { filtrarHistorial(); }
@@ -6221,10 +6221,14 @@ function popularSelectCursosOptgroups(selectId, cursosList) {
   sel.value = currentVal;
 }
 
-let estModoVista = 'tabla';
+let estModoVista = localStorage.getItem('campanario_pref_vista_estudiantes') || 'agrupado';
 
 function cambiarModoVistaEstudiantes(modo) {
   estModoVista = modo;
+  try {
+    localStorage.setItem('campanario_pref_vista_estudiantes', modo);
+  } catch(e) {}
+  
   const btnTabla = document.getElementById('btn-est-mode-tabla');
   const btnAgrupado = document.getElementById('btn-est-mode-agrupado');
   const divTabla = document.getElementById('est-contenedor-tabla');
