@@ -2058,13 +2058,13 @@ async function filtrarHistorial() {
   
   const histAgruparEl = document.getElementById('hist-agrupar');
   if (histAgruparEl) {
-    const savedPref = localStorage.getItem('campanario_pref_agrupar_historial');
-    if (savedPref && !histAgruparEl._userTouched) {
+    const savedPref = localStorage.getItem('campanario_pref_agrupar_historial') || 'curso';
+    if (!histAgruparEl._userTouched) {
       histAgruparEl.value = savedPref;
     }
   }
   
-  const modoAgrupar = histAgruparEl?.value || 'ninguno';
+  const modoAgrupar = histAgruparEl?.value || 'curso';
   const divTabla = document.getElementById('hist-contenedor-tabla');
   const divAgrupado = document.getElementById('hist-contenedor-agrupado');
 

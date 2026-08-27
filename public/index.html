@@ -1097,8 +1097,8 @@
     <div style="display: flex; gap: 8px; align-items: center;">
       <span style="font-size: 13px; font-weight: 700; color: var(--text-secondary);">Agrupar por:</span>
       <select id="hist-agrupar" onchange="this._userTouched=true; localStorage.setItem('campanario_pref_agrupar_historial', this.value); filtrarHistorial();" style="padding: 6px 12px; font-size: 13px; font-weight: 700; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary);">
+        <option value="curso" selected>🏫 Agrupar por Curso / Función (Vista MINEDUC)</option>
         <option value="ninguno">📄 Sin agrupar (Lista Continua)</option>
-        <option value="curso">🏫 Agrupar por Curso / Función</option>
         <option value="estamento">👥 Agrupar por Estamento</option>
       </select>
     </div>
@@ -2256,6 +2256,6 @@
   </div>
 </div>
 
-<script src="logic.js?v=5.0" defer></script>
+<script src="logic.js?v=5.1" defer></script>
 </body>
 </html>
