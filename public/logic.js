@@ -6715,10 +6715,11 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
         const items = levelObj.cursos[cKey];
         const uniqueGId = `${uniqueLId}-course-${cIdx}`;
 
-        // Group items by RUT inside this course
+        // Group items by RUT inside this course (normalizando RUT para unificar rut con y sin puntos)
         const estudiantesMap = {};
         items.forEach(e => {
-          const rKey = (txt(e.rut) || 'SIN_RUT').toUpperCase();
+          const cleanRut = (txt(e.rut) || '').replace(/[^0-9kK]/g, '').toUpperCase();
+          const rKey = cleanRut || (txt(e.nombre) || 'SIN_NOMBRE').toUpperCase();
           if (!estudiantesMap[rKey]) {
             estudiantesMap[rKey] = {
               rut: e.rut,
@@ -6836,7 +6837,8 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
 
       const estudiantesMap = {};
       items.forEach(e => {
-        const rKey = (txt(e.rut) || 'SIN_RUT').toUpperCase();
+        const cleanRut = (txt(e.rut) || '').replace(/[^0-9kK]/g, '').toUpperCase();
+        const rKey = cleanRut || (txt(e.nombre) || 'SIN_NOMBRE').toUpperCase();
         if (!estudiantesMap[rKey]) {
           estudiantesMap[rKey] = {
             rut: e.rut,
