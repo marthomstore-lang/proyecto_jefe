@@ -6483,13 +6483,15 @@ function renderParticipantesRelatosForm() {
     const card = document.createElement('div');
     card.style.cssText = 'background: #fff; padding: 14px; border-radius: 8px; border: 1px solid #7dd3fc; display: flex; flex-direction: column; gap: 10px;';
     
-    const esFuncionarioConocido = listaUsuariosGlobal.some(u => u.nombre === p.nombre);
-    const tipoActual = p._tipoRelator || (esFuncionarioConocido ? 'FUNCIONARIO' : (p.rol && p.rol.includes('Estudiante') ? 'ESTUDIANTE' : 'CUSTOM'));
+    const usersList = Array.isArray(listaUsuariosGlobal) ? listaUsuariosGlobal : [];
+    const esFuncionarioConocido = usersList.some(u => u && u.nombre && u.nombre === p.nombre);
+    const tipoActual = p._tipoRelator || (p.rol && p.rol.includes('Estudiante') ? 'ESTUDIANTE' : (esFuncionarioConocido ? 'FUNCIONARIO' : 'FUNCIONARIO'));
     const cursoSel = p._cursoSeleccionado || '';
     
     let estudiantesFiltrados = [];
     if (tipoActual === 'ESTUDIANTE' && cursoSel) {
-      estudiantesFiltrados = (estudiantes || []).filter(s => (s.Curso || '').trim() === cursoSel);
+      const list = Array.isArray(estudiantes) ? estudiantes : [];
+      estudiantesFiltrados = list.filter(s => s && s.Curso && s.Curso.trim() === cursoSel);
     }
 
     card.innerHTML = `
