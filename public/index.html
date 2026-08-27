@@ -1095,7 +1095,7 @@
     <div class="card-title">🕘 Historial y Archivo de Entrevistas</div>
     <div style="display: flex; gap: 8px; align-items: center;">
       <span style="font-size: 13px; font-weight: 700; color: var(--text-secondary);">Agrupar por:</span>
-      <select id="hist-agrupar" onchange="filtrarHistorial()" style="padding: 6px 12px; font-size: 13px; font-weight: 700; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary);">
+      <select id="hist-agrupar" onchange="this._userTouched=true; localStorage.setItem('campanario_pref_agrupar_historial', this.value); filtrarHistorial();" style="padding: 6px 12px; font-size: 13px; font-weight: 700; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary);">
         <option value="ninguno">📄 Sin agrupar (Lista Continua)</option>
         <option value="curso">🏫 Agrupar por Curso / Función</option>
         <option value="estamento">👥 Agrupar por Estamento</option>
@@ -1149,9 +1149,10 @@
   <div class="card-header no-print" style="margin-bottom:16px">
     <div class="card-title">📄 Vista de Ficha Oficial de Entrevista</div>
   </div>
-  <div class="btn-row no-print" style="margin-bottom:20px; justify-content: center">
-    <button class="btn btn-primary" onclick="window.print()">🖨 Imprimir Ficha Oficial / Descargar PDF</button>
-    <button class="btn btn-secondary" onclick="goTo('nueva-entrevista')">⬅ Volver a Formulario</button>
+  <div class="btn-row no-print" style="margin-bottom:20px; justify-content: center; gap: 10px; flex-wrap: wrap;">
+    <button type="button" class="btn btn-primary" onclick="window.print()">🖨️ Imprimir Ficha Oficial / Descargar PDF</button>
+    <button type="button" class="btn btn-secondary" style="background:#0284c7; color:#fff; border-color:#0284c7; font-weight:700;" onclick="imprimirSoloRelatosActuales()">📜 Imprimir Solo Relatos / Declaraciones</button>
+    <button type="button" class="btn btn-secondary" onclick="goTo('nueva-entrevista')">⬅ Volver a Formulario</button>
   </div>
   <div id="card-reporte" class="card">
     <div id="reporte">
@@ -2254,6 +2255,6 @@
   </div>
 </div>
 
-<script src="logic.js?v=4.7" defer></script>
+<script src="logic.js?v=4.8" defer></script>
 </body>
 </html>

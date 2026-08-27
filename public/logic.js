@@ -2004,39 +2004,35 @@ function toggleGroupRow(groupId) {
 }
 
 function esEntrevistaVisibleParaUsuario(e, currentUser, currentNombre, userRole) {
+  // Administrador ve todas las entrevistas
   if (userRole === 'Administrador' || userRole === 'ADMINISTRADOR' || currentUser === 'admin') {
     return true;
   }
   
-  // Las entrevistas institucionales no confidenciales (sin tag confidencial) son visibles para revisión
+  if (!currentUser) return false;
+  
   const meta = parseObsMetadata(e.obs || '');
-  if (!meta.creador) {
-    return true;
-  }
-  
-  if (!currentUser) return true;
-  
   const uLower = (currentUser || '').trim().toLowerCase();
   const nLower = (currentNombre || '').trim().toLowerCase();
   
-  // 1. Es el entrevistador responsable
+  // 1. Es el entrevistador responsable (e.resp)
   const respLower = (e.resp || '').trim().toLowerCase();
   if (respLower && (respLower === uLower || respLower === nLower || (nLower && respLower.includes(nLower)) || (nLower && nLower.includes(respLower)))) {
     return true;
   }
   
-  // 2. Es el creador/autor de la entrevista
+  // 2. Es el creador/autor de la entrevista (meta.creador)
   if (meta.creador && (meta.creador.trim().toLowerCase() === uLower || meta.creador.trim().toLowerCase() === nLower)) {
     return true;
   }
   
-  // 3. Es el Profesor Jefe asignado
+  // 3. Es el Profesor Jefe asignado (e.jefe)
   const jefeLower = (e.jefe || '').trim().toLowerCase();
   if (jefeLower && (jefeLower === uLower || jefeLower === nLower || (nLower && jefeLower.includes(nLower)) || (nLower && nLower.includes(jefeLower)))) {
     return true;
   }
   
-  // 4. Está en la lista de participantes / relatos de la entrevista
+  // 4. Está en la lista de participantes / relatos de la entrevista (participantes_relatos / meta.relatos)
   let relatos = [];
   try {
     const rawParts = e.participantes_relatos || meta.relatos || '[]';
@@ -2059,7 +2055,16 @@ function esEntrevistaVisibleParaUsuario(e, currentUser, currentNombre, userRole)
 async function filtrarHistorial() {
   const q = txt(document.getElementById('hist-q').value).toLowerCase();
   const est = document.getElementById('hist-estado').value;
-  const modoAgrupar = document.getElementById('hist-agrupar')?.value || 'ninguno';
+  
+  const histAgruparEl = document.getElementById('hist-agrupar');
+  if (histAgruparEl) {
+    const savedPref = localStorage.getItem('campanario_pref_agrupar_historial');
+    if (savedPref && !histAgruparEl._userTouched) {
+      histAgruparEl.value = savedPref;
+    }
+  }
+  
+  const modoAgrupar = histAgruparEl?.value || 'ninguno';
   const divTabla = document.getElementById('hist-contenedor-tabla');
   const divAgrupado = document.getElementById('hist-contenedor-agrupado');
 
@@ -3440,6 +3445,163 @@ function imprimirListaDeEntrevistas(list) {
 
 function imprimirReporteIndividual(id) {
   window.location.hash = 'reporte?id=' + id + '&print=1';
+}
+
+function generarHtmlSoloRelatos(e, tieneAcceso, participantesServidor = []) {
+  const meta = parseObsMetadata(e.obs || '');
+  let relatos = [];
+  try {
+    const rawParts = e.participantes_relatos || meta.relatos || '[]';
+    relatos = typeof rawParts === 'string' ? JSON.parse(rawParts) : rawParts;
+  } catch(err) {
+    relatos = [];
+  }
+  
+  // Incluir también comentarios/aportes del servidor si existen
+  if (Array.isArray(participantesServidor)) {
+    participantesServidor.forEach(p => {
+      if (p.comentario && !relatos.some(r => r.nombre === (p.nombre_completo || p.username))) {
+        relatos.push({
+          nombre: p.nombre_completo || p.username,
+          rol: p.perfil || 'Participante',
+          relato: p.comentario
+        });
+      }
+    });
+  }
+
+  const logoUrl = getLogoUrl();
+  let logoHeaderHtml = logoUrl ? `
+    <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <img src="${esc(logoUrl)}" alt="Logo Institucional" style="max-height: 60px; max-width: 150px; object-fit: contain;">
+        <div>
+          <h2 style="font-size:18px; margin:0; font-family:var(--font-title); font-weight:800; color:#0f172a;">Acta Oficial de Declaraciones y Relatos</h2>
+          <span style="font-size:12px; font-weight:600; color:#64748b;">Liceo Técnico Profesional Campanario — RBD 3941</span>
+        </div>
+      </div>
+      <div style="text-align: right; font-size: 11px; color: #64748b; border-left: 1px solid #cbd5e1; padding-left: 12px;">
+        <strong style="color: #1e293b;">DOCUMENTO DE TESTIMONIOS</strong><br>
+        <span>Folio: <code style="color:#0284c7; font-weight:bold;">${esc(e.id)}</code></span>
+      </div>
+    </div>
+  ` : `
+    <div class="rpt-title" style="border-bottom: 2px solid #0284c7; padding-bottom: 10px; margin-bottom: 16px;">
+      <h2 style="font-size:18px; margin-bottom:4px; font-family:var(--font-title); font-weight:800; color:#0f172a;">Acta Oficial de Declaraciones y Relatos de Participantes</h2>
+      <strong style="font-size:12px; color:#64748b">Liceo Técnico Profesional Campanario — RBD 3941 | Folio: ${esc(e.id)}</strong>
+    </div>
+  `;
+
+  let content = `
+    <div class="report-block" style="padding: 20px; background: #fff;">
+      ${logoHeaderHtml}
+      
+      <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
+        <div><strong>👤 Estudiante / Caso:</strong> ${esc(e.nombre)} (${esc(e.rut)})</div>
+        <div><strong>🏫 Curso / Estamento:</strong> ${esc(e.curso || '---')}</div>
+        <div><strong>📅 Fecha Entrevista:</strong> ${esc(e.fecha)} ${esc(e.hora || '')}</div>
+        <div><strong>✍️ Entrevistador Responsable:</strong> ${esc(e.resp)}</div>
+      </div>
+      
+      <h3 style="font-size: 14px; font-weight: 700; color: #0369a1; text-transform: uppercase; border-bottom: 1.5px solid #0284c7; padding-bottom: 6px; margin-bottom: 16px;">
+        📝 Declaraciones, Relatos y Testimonios Registrados (${relatos.length})
+      </h3>
+  `;
+
+  if (!tieneAcceso) {
+    content += `
+      <div style="padding: 24px; text-align: center; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; color: #991b1b;">
+        🔒 Declaraciones confidenciales. No posee permisos para visualizar estos relatos.
+      </div>
+    `;
+  } else if (!relatos || relatos.length === 0) {
+    content += `
+      <div style="padding: 24px; text-align: center; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; color: #64748b; font-style: italic;">
+        No se registran relatos ni testimonios de participantes adicionales agregados a esta entrevista.
+      </div>
+    `;
+  } else {
+    content += relatos.map((p, idx) => `
+      <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; page-break-inside: avoid;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 10px;">
+          <div>
+            <strong style="font-size: 14px; color: #0f172a;">👤 ${esc(p.nombre)}</strong>
+            <span style="font-size: 11.5px; background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 999px; font-weight: 700; margin-left: 8px;">${esc(p.rol || 'Declarante')}</span>
+          </div>
+          <span style="font-size: 11px; color: #64748b; font-weight: 600;">Declaración N° ${idx + 1}</span>
+        </div>
+        <div style="font-size: 13.5px; color: #334155; line-height: 1.6; white-space: pre-wrap; background: #f8fafc; padding: 12px 14px; border-radius: 6px; border-left: 3.5px solid #0284c7;">
+          "${esc(p.relato || 'Sin testimonio registrado')}"
+        </div>
+        <div style="margin-top: 24px; display: flex; justify-content: flex-end;">
+          <div style="text-align: center; width: 260px;">
+            ________________________________________<br>
+            <span style="font-size: 11px; font-weight: 600; color: #475569;">Firma Declarante: ${esc(p.nombre)}</span>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  content += `
+      <div class="firma-row" style="margin-top: 40px; display: flex; justify-content: space-between; page-break-inside: avoid;">
+        <div>
+          ________________________________________<br>
+          <span style="font-size:11px; font-weight:600">Firma Entrevistador/a Responsable</span>
+        </div>
+        <div>
+          ________________________________________<br>
+          <span style="font-size:11px; font-weight:600">Firma Ministro de Fe / Dirección</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return content;
+}
+
+async function imprimirSoloRelatosActuales() {
+  const hash = window.location.hash.slice(1);
+  const params = new URLSearchParams(hash.split('?')[1] || '');
+  const id = params.get('id');
+  
+  if (!id) {
+    toast("⚠️ Por favor seleccione o abra primero la ficha de una entrevista");
+    return;
+  }
+  
+  let e = (entrevistas || []).find(x => x.id && x.id.toUpperCase() === id.toUpperCase());
+  if (!e) {
+    try {
+      const res = await fetch('/api/entrevistas');
+      const all = await res.json();
+      e = all.find(x => x.id && x.id.toUpperCase() === id.toUpperCase());
+    } catch(err) {}
+  }
+  if (!e) {
+    toast("❌ No se encontró la entrevista " + id);
+    return;
+  }
+  
+  const currentUser = sessionStorage.getItem('campanario_user');
+  const userRole = sessionStorage.getItem('campanario_perfil');
+  const currentNombre = sessionStorage.getItem('campanario_nombre');
+  const tieneAcceso = esEntrevistaVisibleParaUsuario(e, currentUser, currentNombre, userRole);
+  
+  let participantes = [];
+  try {
+    const res = await fetch(`/api/entrevistas/participantes?entrevista_id=${encodeURIComponent(id)}`);
+    participantes = await res.json();
+  } catch(err) {}
+  
+  const rptCont = document.getElementById('reporte');
+  if (rptCont) {
+    rptCont.innerHTML = generarHtmlSoloRelatos(e, tieneAcceso, participantes);
+  }
+  
+  setTimeout(() => {
+    window.print();
+  }, 300);
 }
 
 async function cargarReporteDesdeHash(id, print) {
@@ -6203,6 +6365,41 @@ function seleccionarFuncionarioRelato(idx, val) {
   renderParticipantesRelatosForm();
 }
 
+function obtenerCursosUnicosEstudiantes() {
+  if (!estudiantes || estudiantes.length === 0) return [];
+  const set = new Set();
+  estudiantes.forEach(s => {
+    if (s.Curso) set.add(s.Curso.trim());
+  });
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+}
+
+function seleccionarTipoRelator(idx, tipo) {
+  if (!participantesRelatosForm[idx]) return;
+  participantesRelatosForm[idx]._tipoRelator = tipo;
+  if (tipo === 'ESTUDIANTE') {
+    participantesRelatosForm[idx].rol = 'Testigo / Compañero';
+  }
+  renderParticipantesRelatosForm();
+}
+
+function filtrarEstudiantesRelatoPorCurso(idx, curso) {
+  if (!participantesRelatosForm[idx]) return;
+  participantesRelatosForm[idx]._cursoSeleccionado = curso;
+  renderParticipantesRelatosForm();
+}
+
+function seleccionarEstudianteRelato(idx, rutEstudiante) {
+  if (!participantesRelatosForm[idx] || !rutEstudiante) return;
+  const st = (estudiantes || []).find(s => (s.RUT || s.Rut || '').replace(/[^0-9kK]/g, '').toUpperCase() === (rutEstudiante || '').replace(/[^0-9kK]/g, '').toUpperCase());
+  if (st) {
+    const full = `${st.Nombres || ''} ${st['Apellido Paterno'] || ''} ${st['Apellido Materno'] || ''}`.replace(/\s+/g, ' ').trim();
+    participantesRelatosForm[idx].nombre = full;
+    participantesRelatosForm[idx].rol = `Estudiante (${st.Curso || 'Matriculado'})`;
+  }
+  renderParticipantesRelatosForm();
+}
+
 function renderParticipantesRelatosForm() {
   const cont = document.getElementById('e-participantes-relatos-list');
   if (!cont) return;
@@ -6213,31 +6410,77 @@ function renderParticipantesRelatosForm() {
     return;
   }
 
+  const cursosDisponibles = obtenerCursosUnicosEstudiantes();
+
   participantesRelatosForm.forEach((p, idx) => {
     const card = document.createElement('div');
     card.style.cssText = 'background: #fff; padding: 14px; border-radius: 8px; border: 1px solid #7dd3fc; display: flex; flex-direction: column; gap: 10px;';
     
     const esFuncionarioConocido = listaUsuariosGlobal.some(u => u.nombre === p.nombre);
+    const tipoActual = p._tipoRelator || (esFuncionarioConocido ? 'FUNCIONARIO' : (p.rol && p.rol.includes('Estudiante') ? 'ESTUDIANTE' : 'CUSTOM'));
+    const cursoSel = p._cursoSeleccionado || '';
+    
+    let estudiantesFiltrados = [];
+    if (tipoActual === 'ESTUDIANTE' && cursoSel) {
+      estudiantesFiltrados = (estudiantes || []).filter(s => (s.Curso || '').trim() === cursoSel);
+    }
 
     card.innerHTML = `
       <div style="display: flex; flex-direction: column; gap: 8px;">
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
-          <div style="flex: 2; min-width: 220px;">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; background: #f0f9ff; padding: 10px; border-radius: 6px; border: 1px solid #bae6fd;">
+          <div style="flex: 1.5; min-width: 180px;">
             <label style="font-size: 11.5px; font-weight: 700; color: #0369a1; margin-bottom: 4px; display: block;">
-              👤 Seleccionar Funcionario / Usuario del Liceo (Relator):
+              👥 Origen / Tipo de Relator:
             </label>
-            <select onchange="seleccionarFuncionarioRelato(${idx}, this.value)" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; background: #f8fafc; font-weight: 600; color: #1e1b4b;">
-              <option value="">-- Seleccionar Funcionario Registrado --</option>
-              ${listaUsuariosGlobal.map(u => `<option value="${esc(u.nombre)}" ${p.nombre === u.nombre ? 'selected' : ''}>${esc(u.nombre)} (${esc(u.username)})</option>`).join('')}
-              <option value="CUSTOM" ${!esFuncionarioConocido && p.nombre ? 'selected' : ''}>-- Escribir Nombre Personalizado (Ej: Apoderado / Externo) --</option>
+            <select onchange="seleccionarTipoRelator(${idx}, this.value)" style="width: 100%; padding: 7px 10px; font-size: 12.5px; border: 1px solid #7dd3fc; border-radius: 6px; background: #ffffff; font-weight: 700; color: #0369a1;">
+              <option value="FUNCIONARIO" ${tipoActual === 'FUNCIONARIO' ? 'selected' : ''}>👨‍🏫 Funcionario / Docente del Liceo</option>
+              <option value="ESTUDIANTE" ${tipoActual === 'ESTUDIANTE' ? 'selected' : ''}>🎒 Estudiante (Filtrar por Curso)</option>
+              <option value="CUSTOM" ${tipoActual === 'CUSTOM' ? 'selected' : ''}>✍️ Escribir Nombre Personalizado (Apoderado / Externo)</option>
             </select>
           </div>
 
-          <div style="flex: 1; min-width: 150px;">
+          ${tipoActual === 'FUNCIONARIO' ? `
+            <div style="flex: 2; min-width: 200px;">
+              <label style="font-size: 11.5px; font-weight: 700; color: #0369a1; margin-bottom: 4px; display: block;">
+                👤 Seleccionar Funcionario Registrado:
+              </label>
+              <select onchange="seleccionarFuncionarioRelato(${idx}, this.value)" style="width: 100%; padding: 7px 10px; font-size: 12.5px; border: 1px solid var(--border); border-radius: 6px; background: #ffffff; font-weight: 600; color: #1e1b4b;">
+                <option value="">-- Seleccionar Funcionario --</option>
+                ${listaUsuariosGlobal.map(u => `<option value="${esc(u.nombre)}" ${p.nombre === u.nombre ? 'selected' : ''}>${esc(u.nombre)} (${esc(u.username)})</option>`).join('')}
+              </select>
+            </div>
+          ` : ''}
+
+          ${tipoActual === 'ESTUDIANTE' ? `
+            <div style="flex: 1; min-width: 150px;">
+              <label style="font-size: 11.5px; font-weight: 700; color: #0369a1; margin-bottom: 4px; display: block;">
+                🏫 1. Seleccionar Curso:
+              </label>
+              <select onchange="filtrarEstudiantesRelatoPorCurso(${idx}, this.value)" style="width: 100%; padding: 7px 10px; font-size: 12.5px; border: 1px solid #7dd3fc; border-radius: 6px; background: #ffffff; font-weight: 700; color: #0369a1;">
+                <option value="">-- Curso --</option>
+                ${cursosDisponibles.map(c => `<option value="${esc(c)}" ${cursoSel === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+              </select>
+            </div>
+
+            <div style="flex: 1.5; min-width: 200px;">
+              <label style="font-size: 11.5px; font-weight: 700; color: #0369a1; margin-bottom: 4px; display: block;">
+                🎓 2. Seleccionar Estudiante:
+              </label>
+              <select onchange="seleccionarEstudianteRelato(${idx}, this.value)" style="width: 100%; padding: 7px 10px; font-size: 12.5px; border: 1px solid #7dd3fc; border-radius: 6px; background: #ffffff; font-weight: 600; color: #1e1b4b;" ${!cursoSel ? 'disabled' : ''}>
+                <option value="">${cursoSel ? '-- Seleccionar Estudiante --' : '-- Primero elija curso --'}</option>
+                ${estudiantesFiltrados.map(s => {
+                  const nameFull = `${s.Nombres || ''} ${s['Apellido Paterno'] || ''} ${s['Apellido Materno'] || ''}`.replace(/\s+/g, ' ').trim();
+                  return `<option value="${esc(s.RUT || s.Rut)}" ${p.nombre === nameFull ? 'selected' : ''}>${esc(nameFull)} (${esc(s.RUT || s.Rut)})</option>`;
+                }).join('')}
+              </select>
+            </div>
+          ` : ''}
+
+          <div style="flex: 1; min-width: 140px;">
             <label style="font-size: 11.5px; font-weight: 700; color: #0369a1; margin-bottom: 4px; display: block;">
               🏷️ Rol / Vínculo:
             </label>
-            <select onchange="participantesRelatosForm[${idx}].rol = this.value" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; outline: none;">
+            <select onchange="participantesRelatosForm[${idx}].rol = this.value; renderParticipantesRelatosForm();" style="width: 100%; padding: 7px 10px; font-size: 12.5px; border: 1px solid var(--border); border-radius: 6px; outline: none; background: #fff;">
               <option value="Profesor/a Jefe" ${p.rol === 'Profesor/a Jefe' ? 'selected' : ''}>Profesor/a Jefe</option>
               <option value="Profesor/a Asignatura" ${p.rol === 'Profesor/a Asignatura' ? 'selected' : ''}>Profesor/a Asignatura</option>
               <option value="Convivencia Escolar" ${p.rol === 'Convivencia Escolar' ? 'selected' : ''}>Convivencia Escolar</option>
@@ -6245,6 +6488,7 @@ function renderParticipantesRelatosForm() {
               <option value="Inspector/a" ${p.rol === 'Inspector/a' ? 'selected' : ''}>Inspector/a</option>
               <option value="Apoderado/a" ${p.rol === 'Apoderado/a' ? 'selected' : ''}>Apoderado/a</option>
               <option value="Testigo / Compañero" ${p.rol === 'Testigo / Compañero' ? 'selected' : ''}>Testigo / Compañero/a</option>
+              <option value="Estudiante" ${p.rol && p.rol.startsWith('Estudiante') ? 'selected' : ''}>Estudiante</option>
               <option value="Otro" ${p.rol === 'Otro' ? 'selected' : ''}>Otro</option>
             </select>
           </div>
