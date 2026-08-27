@@ -2360,6 +2360,9 @@ async function cargarEntrevistaParaEditarDirecto(id) {
   cargarParticipantesEdit(id);
   
   toast(`✏️ Cargada entrevista ${id} para edición`);
+  if (typeof goTo === 'function' && !window.location.hash.includes('nueva-entrevista')) {
+    goTo('nueva-entrevista?edit=' + id);
+  }
 }
 
 async function eliminarEnt(id) {
@@ -6670,8 +6673,8 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
             <td style="font-size: 12px; color: var(--text-secondary); padding: 8px 12px;">${esc(e.resp || '')}</td>
             <td style="padding: 8px 12px;"><span style="font-size: 11px; font-weight: 700; color: ${badgeColor}; padding: 2px 8px; border-radius: 9999px; background: rgba(0,0,0,0.04);">${esc(e.estado || '')}</span></td>
             <td style="text-align: right; padding: 8px 12px;">
-              <button class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditarDirecto('${esc(e.id)}')" style="padding: 3px 8px; font-size: 11px;">✏️ Editar</button>
-              <button class="btn btn-sm btn-secondary" onclick="imprimirDirectoEntrevista('${esc(e.id)}')" style="padding: 3px 8px; font-size: 11px;">🖨️ Ver Ficha</button>
+              <button class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditarDirecto('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700;">✏️ Editar</button>
+              <button class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700; background: #e0f2fe; color: #0369a1; border-color: #7dd3fc;">📄 Ver Ficha</button>
             </td>
           </tr>
         `;
@@ -6689,7 +6692,7 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
               <span style="background: #3730a3; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">${totalEnts} ENTREVISTAS</span>
             </td>
             <td style="text-align: right; padding: 8px 12px;">
-              <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); imprimirEntrevistasPersona('${esc(estObj.rut)}')" style="padding: 3px 8px; font-size: 11px; font-weight: 700;">🖨️ Imprimir Persona (${totalEnts})</button>
+              <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); imprimirEntrevistasPersona('${esc(estObj.rut)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700;">🖨️ Imprimir Persona (${totalEnts})</button>
             </td>
           </tr>
         `;
@@ -6709,8 +6712,8 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
               <td style="font-size: 12px; color: var(--text-secondary); padding: 8px 12px;">${esc(e.resp || '')}</td>
               <td style="padding: 8px 12px;"><span style="font-size: 11px; font-weight: 700; color: ${badgeColor}; padding: 2px 8px; border-radius: 9999px; background: rgba(0,0,0,0.04);">${esc(e.estado || '')}</span></td>
               <td style="text-align: right; padding: 8px 12px;">
-                <button class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditarDirecto('${esc(e.id)}')" style="padding: 3px 8px; font-size: 11px;">✏️ Editar</button>
-                <button class="btn btn-sm btn-secondary" onclick="imprimirDirectoEntrevista('${esc(e.id)}')" style="padding: 3px 8px; font-size: 11px;">🖨️ Ver Ficha</button>
+                <button class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditarDirecto('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700;">✏️ Editar</button>
+                <button class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700; background: #e0f2fe; color: #0369a1; border-color: #7dd3fc;">📄 Ver Ficha</button>
               </td>
             </tr>
           `;
