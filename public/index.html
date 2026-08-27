@@ -384,7 +384,8 @@
 <div class="page" id="pg-estudiantes">
   <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
     <div class="card-title">🎒 Base de Datos — Estudiantes del Establecimiento</div>
-    <div style="display: flex; gap: 8px;">
+    <div style="display: flex; gap: 8px; align-items: center;">
+      <button type="button" class="btn btn-sm" id="btn-est-volver" onclick="volverAEstudiantesAgrupado()" style="font-size: 12px; font-weight: 700; background: #0284c7; color: #ffffff; border: 1px solid #0284c7; display: none; align-items: center; gap: 4px;">⬅ Volver a Vista MINEDUC</button>
       <button type="button" class="btn btn-sm btn-primary" id="btn-est-mode-tabla" onclick="cambiarModoVistaEstudiantes('tabla')" style="font-size: 12px; font-weight: 700;">📋 Vista Tabla</button>
       <button type="button" class="btn btn-sm btn-secondary" id="btn-est-mode-agrupado" onclick="cambiarModoVistaEstudiantes('agrupado')" style="font-size: 12px; font-weight: 700;">📁 Agrupar por Nivel MINEDUC</button>
     </div>
@@ -2255,6 +2256,6 @@
   </div>
 </div>
 
-<script src="logic.js?v=4.9" defer></script>
+<script src="logic.js?v=5.0" defer></script>
 </body>
 </html>

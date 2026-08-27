@@ -6223,16 +6223,33 @@ function popularSelectCursosOptgroups(selectId, cursosList) {
 
 let estModoVista = localStorage.getItem('campanario_pref_vista_estudiantes') || 'agrupado';
 
+function volverAEstudiantesAgrupado() {
+  const selectCurso = document.getElementById('est-curso');
+  if (selectCurso) selectCurso.value = '';
+  cambiarModoVistaEstudiantes('agrupado');
+}
+
 function cambiarModoVistaEstudiantes(modo) {
   estModoVista = modo;
   try {
     localStorage.setItem('campanario_pref_vista_estudiantes', modo);
   } catch(e) {}
   
+  const btnVolver = document.getElementById('btn-est-volver');
   const btnTabla = document.getElementById('btn-est-mode-tabla');
   const btnAgrupado = document.getElementById('btn-est-mode-agrupado');
   const divTabla = document.getElementById('est-contenedor-tabla');
   const divAgrupado = document.getElementById('est-contenedor-agrupado');
+
+  const curVal = document.getElementById('est-curso')?.value;
+
+  if (btnVolver) {
+    if (modo === 'tabla' || curVal) {
+      btnVolver.style.display = 'inline-flex';
+    } else {
+      btnVolver.style.display = 'none';
+    }
+  }
 
   if (modo === 'agrupado') {
     if (btnTabla) { btnTabla.className = 'btn btn-sm btn-secondary'; }
