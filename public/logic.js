@@ -6360,31 +6360,36 @@ async function cargarListaUsuariosGlobal() {
   }
 }
 
-async function agregarParticipanteRelatoForm() {
+function agregarParticipanteRelatoForm() {
   if (!Array.isArray(participantesRelatosForm)) {
     participantesRelatosForm = [];
-  }
-  
-  if (!estudiantes || !Array.isArray(estudiantes) || estudiantes.length === 0) {
-    try {
-      const res = await fetch('/api/estudiantes');
-      estudiantes = await res.json();
-    } catch(err) {}
-  }
-  
-  if (!listaUsuariosGlobal || !Array.isArray(listaUsuariosGlobal) || listaUsuariosGlobal.length === 0) {
-    try {
-      if (typeof cargarListaUsuariosGlobal === 'function') await cargarListaUsuariosGlobal();
-    } catch(err) {}
   }
 
   participantesRelatosForm.push({
     nombre: '',
     rol: 'Apoderado/a',
     relato: '',
-    _tipoRelator: 'CUSTOM'
+    _tipoRelator: 'CUSTOM',
+    _cursoSeleccionado: ''
   });
+  
   renderParticipantesRelatosForm();
+
+  if (!estudiantes || !Array.isArray(estudiantes) || estudiantes.length === 0) {
+    fetch('/api/estudiantes')
+      .then(res => res.json())
+      .then(data => {
+        estudiantes = Array.isArray(data) ? data : [];
+        renderParticipantesRelatosForm();
+      })
+      .catch(err => {});
+  }
+  
+  if (!listaUsuariosGlobal || !Array.isArray(listaUsuariosGlobal) || listaUsuariosGlobal.length === 0) {
+    if (typeof cargarListaUsuariosGlobal === 'function') {
+      cargarListaUsuariosGlobal().then(() => renderParticipantesRelatosForm()).catch(err => {});
+    }
+  }
 }
 
 function eliminarParticipanteRelatoForm(idx) {
