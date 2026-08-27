@@ -6360,26 +6360,48 @@ async function cargarListaUsuariosGlobal() {
   }
 }
 
-function agregarParticipanteRelatoForm() {
+async function agregarParticipanteRelatoForm() {
+  if (!Array.isArray(participantesRelatosForm)) {
+    participantesRelatosForm = [];
+  }
+  
+  if (!estudiantes || !Array.isArray(estudiantes) || estudiantes.length === 0) {
+    try {
+      const res = await fetch('/api/estudiantes');
+      estudiantes = await res.json();
+    } catch(err) {}
+  }
+  
+  if (!listaUsuariosGlobal || !Array.isArray(listaUsuariosGlobal) || listaUsuariosGlobal.length === 0) {
+    try {
+      if (typeof cargarListaUsuariosGlobal === 'function') await cargarListaUsuariosGlobal();
+    } catch(err) {}
+  }
+
   participantesRelatosForm.push({
     nombre: '',
     rol: 'Apoderado/a',
-    relato: ''
+    relato: '',
+    _tipoRelator: 'CUSTOM'
   });
   renderParticipantesRelatosForm();
 }
 
 function eliminarParticipanteRelatoForm(idx) {
-  participantesRelatosForm.splice(idx, 1);
+  if (Array.isArray(participantesRelatosForm)) {
+    participantesRelatosForm.splice(idx, 1);
+  }
   renderParticipantesRelatosForm();
 }
 
 function seleccionarFuncionarioRelato(idx, val) {
+  if (!participantesRelatosForm[idx]) return;
   if (val === 'CUSTOM') {
     renderParticipantesRelatosForm();
     return;
   }
-  const found = listaUsuariosGlobal.find(u => u.nombre === val || u.username === val);
+  const users = Array.isArray(listaUsuariosGlobal) ? listaUsuariosGlobal : [];
+  const found = users.find(u => u.nombre === val || u.username === val);
   if (found) {
     participantesRelatosForm[idx].nombre = found.nombre;
     if (found.perfil && found.perfil.includes('Docente')) participantesRelatosForm[idx].rol = 'Profesor/a Asignatura';
@@ -6390,10 +6412,10 @@ function seleccionarFuncionarioRelato(idx, val) {
 }
 
 function obtenerCursosUnicosEstudiantes() {
-  if (!estudiantes || estudiantes.length === 0) return [];
+  if (!estudiantes || !Array.isArray(estudiantes) || estudiantes.length === 0) return [];
   const set = new Set();
   estudiantes.forEach(s => {
-    if (s.Curso) set.add(s.Curso.trim());
+    if (s && s.Curso && typeof s.Curso === 'string') set.add(s.Curso.trim());
   });
   return Array.from(set).sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
 }
@@ -6415,7 +6437,8 @@ function filtrarEstudiantesRelatoPorCurso(idx, curso) {
 
 function seleccionarEstudianteRelato(idx, rutEstudiante) {
   if (!participantesRelatosForm[idx] || !rutEstudiante) return;
-  const st = (estudiantes || []).find(s => (s.RUT || s.Rut || '').replace(/[^0-9kK]/g, '').toUpperCase() === (rutEstudiante || '').replace(/[^0-9kK]/g, '').toUpperCase());
+  const list = Array.isArray(estudiantes) ? estudiantes : [];
+  const st = list.find(s => (s.RUT || s.Rut || '').replace(/[^0-9kK]/g, '').toUpperCase() === (rutEstudiante || '').replace(/[^0-9kK]/g, '').toUpperCase());
   if (st) {
     const full = `${st.Nombres || ''} ${st['Apellido Paterno'] || ''} ${st['Apellido Materno'] || ''}`.replace(/\s+/g, ' ').trim();
     participantesRelatosForm[idx].nombre = full;
@@ -6429,12 +6452,27 @@ function renderParticipantesRelatosForm() {
   if (!cont) return;
   cont.innerHTML = '';
   
+  if (!Array.isArray(participantesRelatosForm)) {
+    participantesRelatosForm = [];
+  }
+  
   if (participantesRelatosForm.length === 0) {
-    cont.innerHTML = '<p style="font-size: 12px; color: #0284c7; font-style: italic; margin: 4px 0;">No se han agregado participantes adicionales aún. Haga clic en "+ Agregar Participante / Relato" si desea registrar el testimonio de otra persona.</p>';
+    cont.innerHTML = `
+      <div style="background: #ffffff; border: 1px dashed #7dd3fc; border-radius: 8px; padding: 18px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+        <p style="font-size: 13px; color: #0284c7; font-style: italic; margin: 0;">
+          No se han agregado participantes adicionales aún. Haga clic en el botón a continuación para registrar testimonios de apoderados, docentes o estudiantes.
+        </p>
+        <button type="button" class="btn btn-sm btn-primary" onclick="agregarParticipanteRelatoForm()" style="font-size: 12.5px; font-weight: 700; background: #0284c7; border-color: #0284c7; padding: 8px 16px;">
+          + Agregar Participante / Relato
+        </button>
+      </div>
+    `;
     return;
   }
 
   const cursosDisponibles = obtenerCursosUnicosEstudiantes();
+  const usersList = Array.isArray(listaUsuariosGlobal) ? listaUsuariosGlobal : [];
+  const estList = Array.isArray(estudiantes) ? estudiantes : [];
 
   participantesRelatosForm.forEach((p, idx) => {
     const card = document.createElement('div');
