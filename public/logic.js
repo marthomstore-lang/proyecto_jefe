@@ -6649,6 +6649,7 @@ async function guardarParticipantesRelatosSolo() {
 }
 
 // ══════════════ RENDERING HISTORIAL AGRUPADO (CURSO / ESTAMENTO) ══════════════
+// ══════════════ RENDERING HISTORIAL AGRUPADO (CURSO / ESTAMENTO) ══════════════
 function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
   const cont = document.getElementById('hist-contenedor-agrupado');
   if (!cont) return;
@@ -6659,8 +6660,8 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
     return;
   }
 
+  // Agrupar por curso/estamento
   const gruposMap = {};
-
   entrevistasRows.forEach(e => {
     let key = 'Sin Clasificar';
     if (modoAgrupar === 'curso') {
@@ -6672,60 +6673,187 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
     gruposMap[key].push(e);
   });
 
-  const sortedKeys = Object.keys(gruposMap).sort();
-
-  sortedKeys.forEach((groupKey, gIdx) => {
-    const items = gruposMap[groupKey];
-    const groupCard = document.createElement('div');
-    groupCard.style.cssText = "background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; box-shadow: var(--shadow-sm);";
-
-    const uniqueGId = `hist-group-${gIdx}`;
-
-    let rowsHtml = '';
-    
-    // Group items by RUT inside this course/estamento
-    const estudiantesMap = {};
-    items.forEach(e => {
-      const rKey = (txt(e.rut) || 'SIN_RUT').toUpperCase();
-      if (!estudiantesMap[rKey]) {
-        estudiantesMap[rKey] = {
-          rut: e.rut,
-          nombre: e.nombre,
-          interviews: []
-        };
-      }
-      estudiantesMap[rKey].interviews.push(e);
+  if (modoAgrupar === 'curso') {
+    // Agrupar cursos bajo Carpetas de Nivel MINEDUC (Igual que Imagen 2)
+    const mineducMap = {};
+    Object.keys(gruposMap).forEach(cKey => {
+      const info = obtenerNivelMineduc(cKey);
+      const mKey = info.label;
+      if (!mineducMap[mKey]) mineducMap[mKey] = { code: info.code, name: info.name, cursos: {} };
+      mineducMap[mKey].cursos[cKey] = gruposMap[cKey];
     });
 
-    Object.values(estudiantesMap).forEach((estObj, estIdx) => {
-      const subGId = `${uniqueGId}-sub-${estIdx}`;
-      const totalEnts = estObj.interviews.length;
-      estObj.interviews.sort((a, b) => b.id.localeCompare(a.id));
+    // Ordenar niveles MINEDUC por código
+    const sortedLevels = Object.keys(mineducMap).sort((a, b) => a.localeCompare(b, 'es'));
 
-      if (totalEnts === 1) {
-        const e = estObj.interviews[0];
-        let badgeColor = 'var(--primary)';
-        if (e.estado === 'Cerrada') badgeColor = '#059669';
-        if (e.estado === 'En seguimiento') badgeColor = '#d97706';
+    sortedLevels.forEach((levelLabel, lIdx) => {
+      const levelObj = mineducMap[levelLabel];
+      const cursosKeys = Object.keys(levelObj.cursos).sort();
+      let totalEntrevistasNivel = 0;
+      cursosKeys.forEach(ck => { totalEntrevistasNivel += levelObj.cursos[ck].length; });
 
-        const rowBg = estIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
+      const levelCard = document.createElement('div');
+      levelCard.style.cssText = "margin-bottom: 20px; border-radius: 10px; border: 1px solid #bfdbfe; overflow: hidden; background: #ffffff; box-shadow: 0 2px 6px rgba(0,0,0,0.05);";
 
-        rowsHtml += `
-          <tr style="border-bottom: 2px solid #e2e8f0; border-left: 5px solid #0284c7; background-color: ${rowBg}; transition: background 0.15s;" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='${rowBg}'">
-            <td style="font-family: monospace; font-weight: 700; font-size: 12px; color: #0369a1; padding: 10px 12px;">${esc(e.id)}</td>
-            <td style="font-size: 12px; padding: 10px 12px; font-weight: 500; color: #334155;">${esc(e.fecha)}</td>
-            <td style="font-family: monospace; font-size: 12px; color: #475569; padding: 10px 12px;">${esc(e.rut)}</td>
-            <td style="font-weight: 700; color: #0f172a; font-size: 13px; padding: 10px 12px;">👤 ${esc(e.nombre)}</td>
-            <td style="font-size: 12px; color: #475569; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 10px 12px;">${esc(e.objetivo || 'Sin objetivo')}</td>
-            <td style="font-size: 12px; color: #475569; padding: 10px 12px;">${esc(e.resp || '')}</td>
-            <td style="padding: 10px 12px;"><span style="font-size: 11px; font-weight: 700; color: ${badgeColor}; padding: 3px 10px; border-radius: 9999px; background: rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.08);">${esc(e.estado || '')}</span></td>
-            <td style="text-align: right; padding: 10px 12px;">
-              <button class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditarDirecto('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700;">✏️ Editar</button>
-              <button class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700; background: #e0f2fe; color: #0369a1; border-color: #7dd3fc;">📄 Ver Ficha</button>
-            </td>
-          </tr>
+      const uniqueLId = `hist-level-${lIdx}`;
+
+      let levelHeaderHtml = `
+        <div style="background: linear-gradient(90deg, #1d4ed8 0%, #2563eb 100%); color: #ffffff; padding: 12px 18px; font-weight: 800; font-size: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleHistorialAcordeon('${uniqueLId}')">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span id="arrow-${uniqueLId}" style="transition: transform 0.2s; display: inline-block;">▼</span>
+            <span>📁 ${esc(levelLabel)}</span>
+          </div>
+          <span style="background: rgba(255,255,255,0.25); color: #ffffff; font-size: 12px; font-weight: 800; padding: 3px 12px; border-radius: 9999px;">
+            ${totalEntrevistasNivel} ${totalEntrevistasNivel === 1 ? 'entrevista' : 'entrevistas'}
+          </span>
+        </div>
+      `;
+
+      let cursosContentHtml = '';
+
+      cursosKeys.forEach((cKey, cIdx) => {
+        const items = levelObj.cursos[cKey];
+        const uniqueGId = `${uniqueLId}-course-${cIdx}`;
+
+        // Group items by RUT inside this course
+        const estudiantesMap = {};
+        items.forEach(e => {
+          const rKey = (txt(e.rut) || 'SIN_RUT').toUpperCase();
+          if (!estudiantesMap[rKey]) {
+            estudiantesMap[rKey] = {
+              rut: e.rut,
+              nombre: e.nombre,
+              interviews: []
+            };
+          }
+          estudiantesMap[rKey].interviews.push(e);
+        });
+
+        let rowsHtml = '';
+
+        Object.values(estudiantesMap).forEach((estObj, estIdx) => {
+          const subGId = `${uniqueGId}-sub-${estIdx}`;
+          const totalEnts = estObj.interviews.length;
+          estObj.interviews.sort((a, b) => b.id.localeCompare(a.id));
+
+          // MARCAJE Y ENCABEZADO DE ESTUDIANTE (PARA CADA ESTUDIANTE DE FORMA INDIVIDUAL)
+          rowsHtml += `
+            <tr class="subgroup-header" onclick="toggleHistorialSubGroup('${subGId}')" style="background: linear-gradient(90deg, #eff6ff 0%, #dbeafe 100%); cursor: pointer; font-weight: 700; border-bottom: 2px solid #93c5fd; border-top: 2px solid #bfdbfe; border-left: 6px solid #2563eb;">
+              <td colspan="3" style="padding: 10px 12px; font-family: monospace; font-size: 12px; font-weight: 800; color: #1e40af;">
+                <span id="subarrow-${subGId}" style="transition: transform 0.2s; display: inline-block; transform: rotate(90deg); margin-right: 6px; font-size: 11px; color: #2563eb;">▶</span>
+                RUT: ${esc(estObj.rut)}
+              </td>
+              <td colspan="2" style="padding: 10px 12px; font-weight: 800; font-size: 13.5px; color: #1e3a8a;">
+                🎓 ${esc(estObj.nombre)}
+              </td>
+              <td colspan="2" style="padding: 10px 12px;">
+                <span style="background: #2563eb; color: #ffffff; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 9999px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
+                  ${totalEnts === 1 ? '1 ENTREVISTA' : totalEnts + ' ENTREVISTAS'}
+                </span>
+              </td>
+              <td style="text-align: right; padding: 10px 12px;">
+                <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); imprimirEntrevistasPersona('${esc(estObj.rut)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700; background: #ffffff; color: #1e40af; border-color: #93c5fd;">
+                  🖨️ Imprimir Persona (${totalEnts})
+                </button>
+              </td>
+            </tr>
+          `;
+
+          estObj.interviews.forEach(e => {
+            let badgeColor = 'var(--primary)';
+            if (e.estado === 'Cerrada') badgeColor = '#059669';
+            if (e.estado === 'En seguimiento') badgeColor = '#d97706';
+
+            rowsHtml += `
+              <tr class="subrow-${subGId}" style="border-bottom: 1px solid #cbd5e1; border-left: 6px solid #93c5fd; background-color: #f8fafc; transition: background 0.15s;" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='#f8fafc'">
+                <td style="font-family: monospace; font-weight: 700; font-size: 12px; color: #0284c7; padding: 9px 12px 9px 28px;">📄 ${esc(e.id)}</td>
+                <td style="font-size: 12px; padding: 9px 12px; color: #334155; font-weight: 600;">${esc(e.fecha)}</td>
+                <td style="font-family: monospace; font-size: 12px; color: #64748b; padding: 9px 12px;">${esc(e.rut)}</td>
+                <td style="font-weight: 600; padding: 9px 12px; color: #334155;">${esc(e.nombre)}</td>
+                <td style="font-size: 12px; color: #475569; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 9px 12px;">${esc(e.objetivo || 'Sin objetivo')}</td>
+                <td style="font-size: 12px; color: #475569; padding: 9px 12px;">${esc(e.resp || '')}</td>
+                <td style="padding: 9px 12px;"><span style="font-size: 11px; font-weight: 700; color: ${badgeColor}; padding: 2px 8px; border-radius: 9999px; background: rgba(0,0,0,0.05);">${esc(e.estado || '')}</span></td>
+                <td style="text-align: right; padding: 9px 12px;">
+                  <button class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditarDirecto('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700;">✏️ Editar</button>
+                  <button class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700; background: #ffffff; color: #0369a1; border-color: #7dd3fc;">📄 Ver Ficha</button>
+                </td>
+              </tr>
+            `;
+          });
+        });
+
+        cursosContentHtml += `
+          <div style="margin: 12px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff;">
+            <div style="background: #f8fafc; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleHistorialAcordeon('${uniqueGId}')">
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13.5px; color: #1e293b;">
+                <span id="arrow-${uniqueGId}" style="transition: transform 0.2s; display: inline-block;">▼</span>
+                <span>🏫 Curso / Función: <strong style="color: #0284c7;">${esc(cKey)}</strong></span>
+                <span style="background: #0284c7; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">${items.length} entrevistas</span>
+              </div>
+              <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); imprimirGrupoEntrevistas('${esc(cKey)}', 'curso')" style="font-size: 11.5px; font-weight: 700;">
+                🖨️ Imprimir Curso
+              </button>
+            </div>
+            <div id="content-${uniqueGId}" class="tbl-wrap" style="display: block; padding: 0;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr style="background: #f1f5f9; font-size: 12px; text-align: left; border-bottom: 1px solid #cbd5e1;">
+                    <th style="padding: 8px 12px;">ID</th>
+                    <th style="padding: 8px 12px;">Fecha</th>
+                    <th style="padding: 8px 12px;">RUT</th>
+                    <th style="padding: 8px 12px;">Nombre</th>
+                    <th style="padding: 8px 12px;">Objetivo</th>
+                    <th style="padding: 8px 12px;">Responsable</th>
+                    <th style="padding: 8px 12px;">Estado</th>
+                    <th style="padding: 8px 12px; text-align: right;">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rowsHtml}
+                </tbody>
+              </table>
+            </div>
+          </div>
         `;
-      } else {
+      });
+
+      levelCard.innerHTML = levelHeaderHtml + `
+        <div id="content-${uniqueLId}" style="display: block; padding: 6px 0;">
+          ${cursosContentHtml}
+        </div>
+      `;
+      cont.appendChild(levelCard);
+    });
+  } else {
+    // Si se agrupa por Estamento
+    const sortedKeys = Object.keys(gruposMap).sort();
+    sortedKeys.forEach((groupKey, gIdx) => {
+      const items = gruposMap[groupKey];
+      const groupCard = document.createElement('div');
+      groupCard.style.cssText = "background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; box-shadow: var(--shadow-sm); margin-bottom: 16px;";
+
+      const uniqueGId = `hist-group-${gIdx}`;
+
+      const estudiantesMap = {};
+      items.forEach(e => {
+        const rKey = (txt(e.rut) || 'SIN_RUT').toUpperCase();
+        if (!estudiantesMap[rKey]) {
+          estudiantesMap[rKey] = {
+            rut: e.rut,
+            nombre: e.nombre,
+            interviews: []
+          };
+        }
+        estudiantesMap[rKey].interviews.push(e);
+      });
+
+      let rowsHtml = '';
+
+      Object.values(estudiantesMap).forEach((estObj, estIdx) => {
+        const subGId = `${uniqueGId}-sub-${estIdx}`;
+        const totalEnts = estObj.interviews.length;
+        estObj.interviews.sort((a, b) => b.id.localeCompare(a.id));
+
         rowsHtml += `
           <tr class="subgroup-header" onclick="toggleHistorialSubGroup('${subGId}')" style="background: linear-gradient(90deg, #eff6ff 0%, #dbeafe 100%); cursor: pointer; font-weight: 700; border-bottom: 2px solid #93c5fd; border-top: 2px solid #bfdbfe; border-left: 6px solid #2563eb;">
             <td colspan="3" style="padding: 10px 12px; font-family: monospace; font-size: 12px; font-weight: 800; color: #1e40af;">
@@ -6765,42 +6893,42 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
             </tr>
           `;
         });
-      }
-    });
+      });
 
-    groupCard.innerHTML = `
-      <div style="background: var(--bg-body, #f8fafc); padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleHistorialAcordeon('${uniqueGId}')">
-        <div style="display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; color: var(--text-primary);">
-          <span id="arrow-${uniqueGId}" style="transition: transform 0.2s; display: inline-block;">▼</span>
-          <span>${modoAgrupar === 'curso' ? '🏫 Curso / Función' : '👥 Estamento'}: <strong style="color: #4f46e5;">${esc(groupKey)}</strong></span>
-          <span style="background: #4f46e5; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 9999px; margin-left: 4px;">${items.length} entrevistas</span>
+      groupCard.innerHTML = `
+        <div style="background: var(--bg-body, #f8fafc); padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleHistorialAcordeon('${uniqueGId}')">
+          <div style="display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; color: var(--text-primary);">
+            <span id="arrow-${uniqueGId}" style="transition: transform 0.2s; display: inline-block;">▼</span>
+            <span>👥 Estamento: <strong style="color: #4f46e5;">${esc(groupKey)}</strong></span>
+            <span style="background: #4f46e5; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 9999px; margin-left: 4px;">${items.length} entrevistas</span>
+          </div>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); imprimirGrupoEntrevistas('${esc(groupKey)}', 'estamento')" style="font-size: 11.5px; font-weight: 700;">
+            🖨️ Imprimir Grupo
+          </button>
         </div>
-        <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); imprimirGrupoEntrevistas('${esc(groupKey)}', '${modoAgrupar}')" style="font-size: 11.5px; font-weight: 700;">
-          🖨️ Imprimir Grupo
-        </button>
-      </div>
-      <div id="content-${uniqueGId}" class="tbl-wrap" style="display: block; padding: 0;">
-        <table style="width: 100%; border-collapse: collapse;">
-          <thead>
-            <tr style="background: #f1f5f9; font-size: 12px; text-align: left; border-bottom: 1px solid var(--border);">
-              <th style="padding: 8px 12px;">ID</th>
-              <th style="padding: 8px 12px;">Fecha</th>
-              <th style="padding: 8px 12px;">RUT</th>
-              <th style="padding: 8px 12px;">Nombre</th>
-              <th style="padding: 8px 12px;">Objetivo</th>
-              <th style="padding: 8px 12px;">Responsable</th>
-              <th style="padding: 8px 12px;">Estado</th>
-              <th style="padding: 8px 12px; text-align: right;">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-        </table>
-      </div>
-    `;
-    cont.appendChild(groupCard);
-  });
+        <div id="content-${uniqueGId}" class="tbl-wrap" style="display: block; padding: 0;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="background: #f1f5f9; font-size: 12px; text-align: left; border-bottom: 1px solid var(--border);">
+                <th style="padding: 8px 12px;">ID</th>
+                <th style="padding: 8px 12px;">Fecha</th>
+                <th style="padding: 8px 12px;">RUT</th>
+                <th style="padding: 8px 12px;">Nombre</th>
+                <th style="padding: 8px 12px;">Objetivo</th>
+                <th style="padding: 8px 12px;">Responsable</th>
+                <th style="padding: 8px 12px;">Estado</th>
+                <th style="padding: 8px 12px; text-align: right;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </div>
+      `;
+      cont.appendChild(groupCard);
+    });
+  }
 }
 
 function toggleHistorialAcordeon(gId) {
