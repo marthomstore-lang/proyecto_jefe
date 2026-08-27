@@ -6663,16 +6663,18 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
         if (e.estado === 'Cerrada') badgeColor = '#059669';
         if (e.estado === 'En seguimiento') badgeColor = '#d97706';
 
+        const rowBg = estIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
+
         rowsHtml += `
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="font-family: monospace; font-weight: 700; font-size: 12px; color: var(--text-secondary); padding: 8px 12px;">${esc(e.id)}</td>
-            <td style="font-size: 12px; padding: 8px 12px;">${esc(e.fecha)}</td>
-            <td style="font-family: monospace; font-size: 12px; padding: 8px 12px;">${esc(e.rut)}</td>
-            <td style="font-weight: 700; padding: 8px 12px;">${esc(e.nombre)}</td>
-            <td style="font-size: 12px; color: var(--text-secondary); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 8px 12px;">${esc(e.objetivo || 'Sin objetivo')}</td>
-            <td style="font-size: 12px; color: var(--text-secondary); padding: 8px 12px;">${esc(e.resp || '')}</td>
-            <td style="padding: 8px 12px;"><span style="font-size: 11px; font-weight: 700; color: ${badgeColor}; padding: 2px 8px; border-radius: 9999px; background: rgba(0,0,0,0.04);">${esc(e.estado || '')}</span></td>
-            <td style="text-align: right; padding: 8px 12px;">
+          <tr style="border-bottom: 2px solid #e2e8f0; border-left: 5px solid #0284c7; background-color: ${rowBg}; transition: background 0.15s;" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='${rowBg}'">
+            <td style="font-family: monospace; font-weight: 700; font-size: 12px; color: #0369a1; padding: 10px 12px;">${esc(e.id)}</td>
+            <td style="font-size: 12px; padding: 10px 12px; font-weight: 500; color: #334155;">${esc(e.fecha)}</td>
+            <td style="font-family: monospace; font-size: 12px; color: #475569; padding: 10px 12px;">${esc(e.rut)}</td>
+            <td style="font-weight: 700; color: #0f172a; font-size: 13px; padding: 10px 12px;">👤 ${esc(e.nombre)}</td>
+            <td style="font-size: 12px; color: #475569; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 10px 12px;">${esc(e.objetivo || 'Sin objetivo')}</td>
+            <td style="font-size: 12px; color: #475569; padding: 10px 12px;">${esc(e.resp || '')}</td>
+            <td style="padding: 10px 12px;"><span style="font-size: 11px; font-weight: 700; color: ${badgeColor}; padding: 3px 10px; border-radius: 9999px; background: rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.08);">${esc(e.estado || '')}</span></td>
+            <td style="text-align: right; padding: 10px 12px;">
               <button class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditarDirecto('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700;">✏️ Editar</button>
               <button class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700; background: #e0f2fe; color: #0369a1; border-color: #7dd3fc;">📄 Ver Ficha</button>
             </td>
@@ -6680,19 +6682,19 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
         `;
       } else {
         rowsHtml += `
-          <tr class="subgroup-header" onclick="toggleHistorialSubGroup('${subGId}')" style="background-color: #eef2ff; cursor: pointer; font-weight: 600; border-bottom: 1px solid #c7d2fe;">
-            <td colspan="3" style="padding: 8px 12px; font-family: monospace; font-size: 12px; font-weight: 700; color: #3730a3;">
-              <span id="subarrow-${subGId}" style="transition: transform 0.2s; display: inline-block; transform: rotate(90deg); margin-right: 6px; font-size: 11px;">▶</span>
+          <tr class="subgroup-header" onclick="toggleHistorialSubGroup('${subGId}')" style="background: linear-gradient(90deg, #eff6ff 0%, #dbeafe 100%); cursor: pointer; font-weight: 700; border-bottom: 2px solid #93c5fd; border-top: 2px solid #bfdbfe; border-left: 6px solid #2563eb;">
+            <td colspan="3" style="padding: 10px 12px; font-family: monospace; font-size: 12px; font-weight: 800; color: #1e40af;">
+              <span id="subarrow-${subGId}" style="transition: transform 0.2s; display: inline-block; transform: rotate(90deg); margin-right: 6px; font-size: 11px; color: #2563eb;">▶</span>
               RUT: ${esc(estObj.rut)}
             </td>
-            <td colspan="2" style="padding: 8px 12px; font-weight: 700; color: #1e1b4b;">
-              👤 ${esc(estObj.nombre)}
+            <td colspan="2" style="padding: 10px 12px; font-weight: 800; font-size: 13.5px; color: #1e3a8a;">
+              🎓 ${esc(estObj.nombre)}
             </td>
-            <td colspan="2" style="padding: 8px 12px;">
-              <span style="background: #3730a3; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">${totalEnts} ENTREVISTAS</span>
+            <td colspan="2" style="padding: 10px 12px;">
+              <span style="background: #2563eb; color: #ffffff; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 9999px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">📂 ${totalEnts} ENTREVISTAS</span>
             </td>
-            <td style="text-align: right; padding: 8px 12px;">
-              <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); imprimirEntrevistasPersona('${esc(estObj.rut)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700;">🖨️ Imprimir Persona (${totalEnts})</button>
+            <td style="text-align: right; padding: 10px 12px;">
+              <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); imprimirEntrevistasPersona('${esc(estObj.rut)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700; background: #ffffff; color: #1e40af; border-color: #93c5fd;">🖨️ Imprimir Persona (${totalEnts})</button>
             </td>
           </tr>
         `;
@@ -6703,17 +6705,17 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
           if (e.estado === 'En seguimiento') badgeColor = '#d97706';
 
           rowsHtml += `
-            <tr class="subrow-${subGId}" style="border-bottom: 1px solid var(--border); background-color: #ffffff;">
-              <td style="font-family: monospace; font-weight: 700; font-size: 12px; color: var(--text-secondary); padding: 8px 12px 8px 24px;">${esc(e.id)}</td>
-              <td style="font-size: 12px; padding: 8px 12px;">${esc(e.fecha)}</td>
-              <td style="font-family: monospace; font-size: 12px; padding: 8px 12px;">${esc(e.rut)}</td>
-              <td style="font-weight: 600; padding: 8px 12px; color: #475569;">${esc(e.nombre)}</td>
-              <td style="font-size: 12px; color: var(--text-secondary); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 8px 12px;">${esc(e.objetivo || 'Sin objetivo')}</td>
-              <td style="font-size: 12px; color: var(--text-secondary); padding: 8px 12px;">${esc(e.resp || '')}</td>
-              <td style="padding: 8px 12px;"><span style="font-size: 11px; font-weight: 700; color: ${badgeColor}; padding: 2px 8px; border-radius: 9999px; background: rgba(0,0,0,0.04);">${esc(e.estado || '')}</span></td>
+            <tr class="subrow-${subGId}" style="border-bottom: 1px solid #cbd5e1; border-left: 6px solid #93c5fd; background-color: #f8fafc; transition: background 0.15s;" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='#f8fafc'">
+              <td style="font-family: monospace; font-weight: 700; font-size: 12px; color: #0284c7; padding: 8px 12px 8px 28px;">📄 ${esc(e.id)}</td>
+              <td style="font-size: 12px; padding: 8px 12px; color: #334155;">${esc(e.fecha)}</td>
+              <td style="font-family: monospace; font-size: 12px; color: #64748b; padding: 8px 12px;">${esc(e.rut)}</td>
+              <td style="font-weight: 600; padding: 8px 12px; color: #334155;">${esc(e.nombre)}</td>
+              <td style="font-size: 12px; color: #475569; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 8px 12px;">${esc(e.objetivo || 'Sin objetivo')}</td>
+              <td style="font-size: 12px; color: #475569; padding: 8px 12px;">${esc(e.resp || '')}</td>
+              <td style="padding: 8px 12px;"><span style="font-size: 11px; font-weight: 700; color: ${badgeColor}; padding: 2px 8px; border-radius: 9999px; background: rgba(0,0,0,0.05);">${esc(e.estado || '')}</span></td>
               <td style="text-align: right; padding: 8px 12px;">
                 <button class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditarDirecto('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700;">✏️ Editar</button>
-                <button class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700; background: #e0f2fe; color: #0369a1; border-color: #7dd3fc;">📄 Ver Ficha</button>
+                <button class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700; background: #ffffff; color: #0369a1; border-color: #7dd3fc;">📄 Ver Ficha</button>
               </td>
             </tr>
           `;
