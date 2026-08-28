@@ -6674,7 +6674,7 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
   });
 
   if (modoAgrupar === 'curso') {
-    // Agrupar cursos bajo Carpetas de Nivel MINEDUC (Igual que Imagen 2)
+    // Agrupar cursos bajo Carpetas de Nivel MINEDUC (Igual que Imagen 2 y 3)
     const mineducMap = {};
     Object.keys(gruposMap).forEach(cKey => {
       const info = obtenerNivelMineduc(cKey);
@@ -6693,12 +6693,12 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
       cursosKeys.forEach(ck => { totalEntrevistasNivel += levelObj.cursos[ck].length; });
 
       const levelCard = document.createElement('div');
-      levelCard.style.cssText = "margin-bottom: 20px; border-radius: 10px; border: 1px solid #bfdbfe; overflow: hidden; background: #ffffff; box-shadow: 0 2px 6px rgba(0,0,0,0.05);";
+      levelCard.style.cssText = "margin-bottom: 24px; border-radius: 10px; border: 1px solid #bfdbfe; overflow: hidden; background: #ffffff; box-shadow: 0 2px 6px rgba(0,0,0,0.05);";
 
       const uniqueLId = `hist-level-${lIdx}`;
 
       let levelHeaderHtml = `
-        <div style="background: linear-gradient(90deg, #1d4ed8 0%, #2563eb 100%); color: #ffffff; padding: 12px 18px; font-weight: 800; font-size: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleHistorialAcordeon('${uniqueLId}')">
+        <div style="background: linear-gradient(90deg, #1d4ed8 0%, #2563eb 100%); color: #ffffff; padding: 14px 20px; font-weight: 800; font-size: 14.5px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleHistorialAcordeon('${uniqueLId}')">
           <div style="display: flex; align-items: center; gap: 10px;">
             <span id="arrow-${uniqueLId}" style="transition: transform 0.2s; display: inline-block;">▼</span>
             <span>📁 ${esc(levelLabel)}</span>
@@ -6709,7 +6709,8 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
         </div>
       `;
 
-      let cursosContentHtml = '';
+      let courseCardsGridHtml = '';
+      let courseBoxesDetailHtml = '';
 
       cursosKeys.forEach((cKey, cIdx) => {
         const items = levelObj.cursos[cKey];
@@ -6730,97 +6731,119 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
           estudiantesMap[rKey].interviews.push(e);
         });
 
-        let rowsHtml = '';
+        const numEstudiantesCurso = Object.keys(estudiantesMap).length;
+
+        // BOTÓN / TARJETA DEL CURSO (IGUAL A LA IMAGEN DE REFERENCIA)
+        courseCardsGridHtml += `
+          <div onclick="toggleHistorialCursoBox('${uniqueGId}')" style="background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 10px 16px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 14px; min-width: 170px; transition: all 0.2s;" onmouseover="this.style.background='#e0e7ff'; this.style.borderColor='#818cf8'" onmouseout="this.style.background='#eef2ff'; this.style.borderColor='#c7d2fe'">
+            <span style="font-size: 13.5px; font-weight: 700; color: #3730a3;">🏫 ${esc(cKey)}</span>
+            <span style="background: #3730a3; color: #ffffff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 9999px; white-space: nowrap;">${numEstudiantesCurso} est.</span>
+          </div>
+        `;
+
+        // RECUADRO DESPLEGABLE CON LISTA DE ESTUDIANTES DE ESTE CURSO
+        let studentGridCardsHtml = '';
+        let studentTablesDetailHtml = '';
 
         Object.values(estudiantesMap).forEach((estObj, estIdx) => {
           const subGId = `${uniqueGId}-sub-${estIdx}`;
           const totalEnts = estObj.interviews.length;
           estObj.interviews.sort((a, b) => b.id.localeCompare(a.id));
 
-          // MARCAJE Y ENCABEZADO DE ESTUDIANTE (PARA CADA ESTUDIANTE DE FORMA INDIVIDUAL)
-          rowsHtml += `
-            <tr class="subgroup-header" onclick="toggleHistorialSubGroup('${subGId}')" style="background: linear-gradient(90deg, #eff6ff 0%, #dbeafe 100%); cursor: pointer; font-weight: 700; border-bottom: 2px solid #93c5fd; border-top: 2px solid #bfdbfe; border-left: 6px solid #2563eb;">
-              <td colspan="3" style="padding: 10px 12px; font-family: monospace; font-size: 12px; font-weight: 800; color: #1e40af;">
-                <span id="subarrow-${subGId}" style="transition: transform 0.2s; display: inline-block; transform: rotate(90deg); margin-right: 6px; font-size: 11px; color: #2563eb;">▶</span>
-                RUT: ${esc(estObj.rut)}
-              </td>
-              <td colspan="2" style="padding: 10px 12px; font-weight: 800; font-size: 13.5px; color: #1e3a8a;">
-                🎓 ${esc(estObj.nombre)}
-              </td>
-              <td colspan="2" style="padding: 10px 12px;">
-                <span style="background: #2563eb; color: #ffffff; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 9999px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
-                  ${totalEnts === 1 ? '1 ENTREVISTA' : totalEnts + ' ENTREVISTAS'}
-                </span>
-              </td>
-              <td style="text-align: right; padding: 10px 12px;">
-                <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); imprimirEntrevistasPersona('${esc(estObj.rut)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700; background: #ffffff; color: #1e40af; border-color: #93c5fd;">
-                  🖨️ Imprimir Persona (${totalEnts})
-                </button>
-              </td>
-            </tr>
+          // TARJETA RECUADRO DE CADA ESTUDIANTE
+          studentGridCardsHtml += `
+            <div onclick="toggleHistorialEstudianteBox('${subGId}')" style="background: #f0f9ff; border: 1px solid #7dd3fc; border-radius: 8px; padding: 10px 14px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: 1; min-width: 250px; max-width: 400px; transition: all 0.15s;" onmouseover="this.style.background='#e0f2fe'" onmouseout="this.style.background='#f0f9ff'">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="subarrow-${subGId}" style="transition: transform 0.2s; font-size: 11px; color: #0284c7; display: inline-block;">▶</span>
+                <span style="font-size: 13px; font-weight: 700; color: #0369a1;">👤 ${esc(estObj.nombre)}</span>
+              </div>
+              <span style="background: #0284c7; color: #ffffff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 9999px; white-space: nowrap;">
+                ${totalEnts} ${totalEnts === 1 ? 'entrevista' : 'entrevistas'}
+              </span>
+            </div>
           `;
 
+          // TABLA EXCLUSIVA DE LAS ENTREVISTAS DE ESTE ESTUDIANTE
+          let rowsHtml = '';
           estObj.interviews.forEach(e => {
             let badgeColor = 'var(--primary)';
             if (e.estado === 'Cerrada') badgeColor = '#059669';
             if (e.estado === 'En seguimiento') badgeColor = '#d97706';
 
             rowsHtml += `
-              <tr class="subrow-${subGId}" style="border-bottom: 1px solid #cbd5e1; border-left: 6px solid #93c5fd; background-color: #f8fafc; transition: background 0.15s;" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='#f8fafc'">
-                <td style="font-family: monospace; font-weight: 700; font-size: 12px; color: #0284c7; padding: 9px 12px 9px 28px;">📄 ${esc(e.id)}</td>
-                <td style="font-size: 12px; padding: 9px 12px; color: #334155; font-weight: 600;">${esc(e.fecha)}</td>
-                <td style="font-family: monospace; font-size: 12px; color: #64748b; padding: 9px 12px;">${esc(e.rut)}</td>
-                <td style="font-weight: 600; padding: 9px 12px; color: #334155;">${esc(e.nombre)}</td>
-                <td style="font-size: 12px; color: #475569; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 9px 12px;">${esc(e.objetivo || 'Sin objetivo')}</td>
-                <td style="font-size: 12px; color: #475569; padding: 9px 12px;">${esc(e.resp || '')}</td>
-                <td style="padding: 9px 12px;"><span style="font-size: 11px; font-weight: 700; color: ${badgeColor}; padding: 2px 8px; border-radius: 9999px; background: rgba(0,0,0,0.05);">${esc(e.estado || '')}</span></td>
-                <td style="text-align: right; padding: 9px 12px;">
+              <tr style="border-bottom: 1px solid #cbd5e1; background-color: #ffffff; transition: background 0.15s;" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='#ffffff'">
+                <td style="font-family: monospace; font-weight: 700; font-size: 12px; color: #0284c7; padding: 10px 12px;">📄 ${esc(e.id)}</td>
+                <td style="font-size: 12px; padding: 10px 12px; color: #334155; font-weight: 600;">${esc(e.fecha)}</td>
+                <td style="font-family: monospace; font-size: 12px; color: #64748b; padding: 10px 12px;">${esc(e.rut)}</td>
+                <td style="font-weight: 600; padding: 10px 12px; color: #334155;">${esc(e.nombre)}</td>
+                <td style="font-size: 12px; color: #475569; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 10px 12px;">${esc(e.objetivo || 'Sin objetivo')}</td>
+                <td style="font-size: 12px; color: #475569; padding: 10px 12px;">${esc(e.resp || '')}</td>
+                <td style="padding: 10px 12px;"><span style="font-size: 11px; font-weight: 700; color: ${badgeColor}; padding: 3px 9px; border-radius: 9999px; background: rgba(0,0,0,0.05);">${esc(e.estado || '')}</span></td>
+                <td style="text-align: right; padding: 10px 12px;">
                   <button class="btn btn-sm btn-primary" onclick="cargarEntrevistaParaEditarDirecto('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700;">✏️ Editar</button>
                   <button class="btn btn-sm btn-secondary" onclick="verReporte('${esc(e.id)}')" style="padding: 4px 10px; font-size: 11.5px; font-weight: 700; background: #ffffff; color: #0369a1; border-color: #7dd3fc;">📄 Ver Ficha</button>
                 </td>
               </tr>
             `;
           });
+
+          studentTablesDetailHtml += `
+            <div id="est-box-${subGId}" style="display: none; margin-top: 12px; background: #ffffff; border: 2px solid #0284c7; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+              <div style="background: #0284c7; color: #ffffff; padding: 10px 16px; font-weight: 800; font-size: 13.5px; display: flex; justify-content: space-between; align-items: center;">
+                <span>🎓 Entrevistas de: <strong>${esc(estObj.nombre)}</strong> (RUT: ${esc(estObj.rut)})</span>
+                <button class="btn btn-sm btn-secondary" onclick="imprimirEntrevistasPersona('${esc(estObj.rut)}')" style="font-size: 11.5px; font-weight: 700; background: #ffffff; color: #0284c7; border: none; padding: 4px 12px;">
+                  🖨️ Imprimir Ficha Estudiante (${totalEnts})
+                </button>
+              </div>
+              <div class="tbl-wrap" style="padding: 0;">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <thead>
+                    <tr style="background: #f1f5f9; font-size: 12px; text-align: left; border-bottom: 1px solid #cbd5e1;">
+                      <th style="padding: 9px 12px;">ID</th>
+                      <th style="padding: 9px 12px;">Fecha</th>
+                      <th style="padding: 9px 12px;">RUT</th>
+                      <th style="padding: 9px 12px;">Nombre</th>
+                      <th style="padding: 9px 12px;">Objetivo</th>
+                      <th style="padding: 9px 12px;">Responsable</th>
+                      <th style="padding: 9px 12px;">Estado</th>
+                      <th style="padding: 9px 12px; text-align: right;">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${rowsHtml}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
         });
 
-        cursosContentHtml += `
-          <div style="margin: 12px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff;">
-            <div style="background: #f8fafc; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleHistorialAcordeon('${uniqueGId}')">
-              <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13.5px; color: #1e293b;">
-                <span id="arrow-${uniqueGId}" style="transition: transform 0.2s; display: inline-block;">▼</span>
-                <span>🏫 Curso / Función: <strong style="color: #0284c7;">${esc(cKey)}</strong></span>
-                <span style="background: #0284c7; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">${items.length} entrevistas</span>
-              </div>
-              <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); imprimirGrupoEntrevistas('${esc(cKey)}', 'curso')" style="font-size: 11.5px; font-weight: 700;">
-                🖨️ Imprimir Curso
+        courseBoxesDetailHtml += `
+          <div id="course-hist-box-${uniqueGId}" style="display: none; margin-top: 14px; padding: 16px; background: #ffffff; border: 1px solid #c7d2fe; border-radius: 8px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);">
+            <div style="font-size: 13.5px; font-weight: 800; color: #1e1b4b; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+              <span>🎓 Estudiantes con Entrevistas en <strong style="color: #4338ca;">${esc(cKey)}</strong>:</span>
+              <button type="button" class="btn btn-sm btn-secondary" onclick="imprimirGrupoEntrevistas('${esc(cKey)}', 'curso')" style="font-size: 11.5px; font-weight: 700;">
+                🖨️ Imprimir Todo el Curso (${items.length})
               </button>
             </div>
-            <div id="content-${uniqueGId}" class="tbl-wrap" style="display: block; padding: 0;">
-              <table style="width: 100%; border-collapse: collapse;">
-                <thead>
-                  <tr style="background: #f1f5f9; font-size: 12px; text-align: left; border-bottom: 1px solid #cbd5e1;">
-                    <th style="padding: 8px 12px;">ID</th>
-                    <th style="padding: 8px 12px;">Fecha</th>
-                    <th style="padding: 8px 12px;">RUT</th>
-                    <th style="padding: 8px 12px;">Nombre</th>
-                    <th style="padding: 8px 12px;">Objetivo</th>
-                    <th style="padding: 8px 12px;">Responsable</th>
-                    <th style="padding: 8px 12px;">Estado</th>
-                    <th style="padding: 8px 12px; text-align: right;">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${rowsHtml}
-                </tbody>
-              </table>
+            
+            <!-- RECUADROS / TARJETAS DE ESTUDIANTES -->
+            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+              ${studentGridCardsHtml}
             </div>
+
+            <!-- TABLAS DE ENTREVISTAS POR ESTUDIANTE -->
+            ${studentTablesDetailHtml}
           </div>
         `;
       });
 
       levelCard.innerHTML = levelHeaderHtml + `
-        <div id="content-${uniqueLId}" style="display: block; padding: 6px 0;">
-          ${cursosContentHtml}
+        <div id="content-${uniqueLId}" style="display: block; padding: 18px; background: #f8fafc;">
+          <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+            ${courseCardsGridHtml}
+          </div>
+          ${courseBoxesDetailHtml}
         </div>
       `;
       cont.appendChild(levelCard);
@@ -6944,6 +6967,23 @@ function toggleHistorialAcordeon(gId) {
       content.style.display = 'none';
       if (arrow) arrow.style.transform = 'rotate(-90deg)';
     }
+  }
+}
+
+function toggleHistorialCursoBox(uniqueGId) {
+  const box = document.getElementById(`course-hist-box-${uniqueGId}`);
+  if (box) {
+    box.style.display = (box.style.display === 'none' || !box.style.display) ? 'block' : 'none';
+  }
+}
+
+function toggleHistorialEstudianteBox(subGId) {
+  const box = document.getElementById(`est-box-${subGId}`);
+  const arrow = document.getElementById(`subarrow-${subGId}`);
+  if (box) {
+    const isHidden = (box.style.display === 'none' || !box.style.display);
+    box.style.display = isHidden ? 'block' : 'none';
+    if (arrow) arrow.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
   }
 }
 
