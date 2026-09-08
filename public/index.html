@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema Integral — Liceo Técnico Profesional Campanario</title>
-  <link rel="stylesheet" href="styles.css?v=2.5">
+  <link rel="stylesheet" href="styles.css?v=2.6">
 </head>
 <body class="login-active">
 
@@ -875,13 +875,15 @@
       <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="abrirLookup()">🔍 Buscar en la Base de Datos</button>
     </div>
     <div class="form-grid">
-      <div class="form-group">
+      <div class="form-group" style="position: relative;">
         <label>RUT entrevistado</label>
-        <input id="e-rut" placeholder="Ej: 12.345.678-9" oninput="formatearRutInput(this)" onblur="autocompletarEnt()">
+        <input id="e-rut" placeholder="Ej: 12.345.678-9" oninput="formatearRutInput(this)" onblur="autocompletarEnt()" autocomplete="off">
+        <div id="e-rut-suggestions" class="autocomplete-dropdown" style="display:none;"></div>
       </div>
-      <div class="form-group">
+      <div class="form-group" style="position: relative;">
         <label>Nombre completo</label>
-        <input id="e-nombre" placeholder="Se autocompleta al ingresar RUT">
+        <input id="e-nombre" placeholder="Escriba nombre o RUT para autocompletar..." autocomplete="off">
+        <div id="e-nombre-suggestions" class="autocomplete-dropdown" style="display:none;"></div>
       </div>
       <div class="form-group">
         <label>Cargo / Estamento</label>
@@ -2256,6 +2258,6 @@
   </div>
 </div>
 
-<script src="logic.js?v=5.9" defer></script>
+<script src="logic.js?v=7.0" defer></script>
 </body>
 </html>

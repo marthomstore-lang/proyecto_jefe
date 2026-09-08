@@ -533,6 +533,11 @@ let localAdmin = [];
 let editandoEntrevistaId = null;
 let multiviewSessionId = null;
 let multiviewInterval = null;
+var participantesRelatosForm = [];
+var listaUsuariosGlobal = [];
+var estudiantes = [];
+var docentes = [];
+var asistentes = [];
 
 // Mask RUT helper in real-time
 function formatRut(rutStr) {
@@ -637,6 +642,8 @@ function goTo(page) {
   if (pageName === 'meta2-adeco') { cargarMeta2Dashboard(); cargarMeta2Ficha(typeof meta2ActualId !== 'undefined' ? meta2ActualId : 1); cargarMeta2Evaluacion(); }
   if (pageName === 'nueva-entrevista') {
     if (typeof cargarListaUsuariosGlobal === 'function') cargarListaUsuariosGlobal();
+    if (typeof setupEntrevistaAutocomplete === 'function') setupEntrevistaAutocomplete();
+    if (typeof renderParticipantesRelatosForm === 'function') renderParticipantesRelatosForm();
     const params = new URLSearchParams(queryString || '');
     const editId = params.get('edit');
     if (editId) {
@@ -6337,13 +6344,13 @@ function filtrarEstPorCursoClick(cursoName) {
 }
 
 // ══════════════ PARTICIPANTES ADICIONALES Y RELATOS ══════════════
-let participantesRelatosForm = [];
-let listaUsuariosGlobal = [];
+
 
 async function cargarListaUsuariosGlobal() {
   try {
     const res = await fetch('/api/usuarios');
-    listaUsuariosGlobal = await res.json();
+    const data = await res.json();
+    listaUsuariosGlobal = Array.isArray(data) ? data : [];
     
     let dl = document.getElementById('dl-usuarios-global');
     if (!dl) {
@@ -6357,6 +6364,7 @@ async function cargarListaUsuariosGlobal() {
     if (eResp) eResp.setAttribute('list', 'dl-usuarios-global');
   } catch (err) {
     console.error("Error al cargar lista de usuarios global:", err);
+    listaUsuariosGlobal = [];
   }
 }
 
@@ -6515,7 +6523,7 @@ function renderParticipantesRelatosForm() {
               </label>
               <select onchange="seleccionarFuncionarioRelato(${idx}, this.value)" style="width: 100%; padding: 7px 10px; font-size: 12.5px; border: 1px solid var(--border); border-radius: 6px; background: #ffffff; font-weight: 600; color: #1e1b4b;">
                 <option value="">-- Seleccionar Funcionario --</option>
-                ${listaUsuariosGlobal.map(u => `<option value="${esc(u.nombre)}" ${p.nombre === u.nombre ? 'selected' : ''}>${esc(u.nombre)} (${esc(u.username)})</option>`).join('')}
+                ${usersList.map(u => `<option value="${esc(u.nombre)}" ${p.nombre === u.nombre ? 'selected' : ''}>${esc(u.nombre)} (${esc(u.username)})</option>`).join('')}
               </select>
             </div>
           ` : ''}
@@ -6567,12 +6575,12 @@ function renderParticipantesRelatosForm() {
 
         <div>
           <label style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 3px; display: block;">Nombre Completo del Relator / Participante:</label>
-          <input type="text" value="${esc(p.nombre)}" onchange="participantesRelatosForm[${idx}].nombre = this.value" placeholder="Escriba o confirme el nombre completo..." style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; outline: none;">
+          <input type="text" value="${esc(p.nombre || '')}" oninput="participantesRelatosForm[${idx}].nombre = this.value" onchange="participantesRelatosForm[${idx}].nombre = this.value" placeholder="Escriba o confirme el nombre completo..." style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; outline: none;">
         </div>
 
         <div>
           <label style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 3px; display: block;">Declaración, Aporte o Relato de la Persona:</label>
-          <textarea class="textarea-md" rows="5" oninput="participantesRelatosForm[${idx}].relato = this.value; autoExpandTextarea(this);" onchange="participantesRelatosForm[${idx}].relato = this.value" placeholder="Escriba la declaración, testimonio o relato expresado por esta persona durante la entrevista..." style="width: 100%; padding: 10px 14px; font-size: 14px; border: 1px solid var(--border); border-radius: 6px; outline: none; resize: vertical;">${esc(p.relato)}</textarea>
+          <textarea class="textarea-md" rows="5" oninput="participantesRelatosForm[${idx}].relato = this.value; autoExpandTextarea(this);" onchange="participantesRelatosForm[${idx}].relato = this.value" placeholder="Escriba la declaración, testimonio o relato expresado por esta persona durante la entrevista..." style="width: 100%; padding: 10px 14px; font-size: 14px; border: 1px solid var(--border); border-radius: 6px; outline: none; resize: vertical;">${esc(p.relato || '')}</textarea>
         </div>
       </div>
     `;
@@ -6660,6 +6668,43 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
     return;
   }
 
+  // Auto-enriquecer entrevistas con datos del estudiante si falta el nombre o el curso
+  if (Array.isArray(entrevistasRows) && typeof estudiantes !== 'undefined' && Array.isArray(estudiantes) && estudiantes.length > 0) {
+    entrevistasRows.forEach(e => {
+      if (!e) return;
+      const cRut = (txt(e.rut) || '').replace(/[^0-9kK]/g, '').toUpperCase();
+      if (cRut) {
+        const st = estudiantes.find(s => {
+          if (!s) return false;
+          const sRut = (txt(s.RUT) || txt(s.Rut) || txt(s.rut)).replace(/[^0-9kK]/g, '').toUpperCase();
+          return sRut && sRut === cRut;
+        });
+
+        if (st) {
+          const nom = txt(st.Nombres) || txt(st.nombre);
+          const pat = txt(st['Apellido Paterno']) || txt(st.apellido_paterno);
+          const mat = txt(st['Apellido Materno']) || txt(st.apellido_materno);
+          const fullName = `${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim();
+          
+          const curNom = txt(e.nombre);
+          if (fullName && (!curNom || curNom.toLowerCase().includes('sin nombre') || curNom.toLowerCase().includes('sin identific'))) {
+            e.nombre = fullName;
+          }
+
+          const curCur = txt(e.curso);
+          const stCur = txt(st.Curso) || txt(st.curso);
+          if (stCur && (!curCur || curCur.toLowerCase().includes('sin curso') || curCur.toLowerCase().includes('sin clasific'))) {
+            e.curso = stCur;
+          }
+
+          if (!txt(e.cargo)) {
+            e.cargo = 'Estudiante';
+          }
+        }
+      }
+    });
+  }
+
   // Agrupar por curso/estamento
   const gruposMap = {};
   entrevistasRows.forEach(e => {
@@ -6723,10 +6768,15 @@ function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
           const rKey = cleanRut || (txt(e.nombre) || 'SIN_NOMBRE').toUpperCase();
           if (!estudiantesMap[rKey]) {
             estudiantesMap[rKey] = {
-              rut: e.rut,
-              nombre: e.nombre,
+              rut: e.rut || '',
+              nombre: txt(e.nombre) || 'Estudiante Sin Nombre',
               interviews: []
             };
+          } else {
+            const curMappedName = txt(estudiantesMap[rKey].nombre);
+            if ((!curMappedName || curMappedName.toLowerCase().includes('sin nombre')) && txt(e.nombre) && !txt(e.nombre).toLowerCase().includes('sin nombre')) {
+              estudiantesMap[rKey].nombre = txt(e.nombre);
+            }
           }
           estudiantesMap[rKey].interviews.push(e);
         });
@@ -7024,5 +7074,290 @@ function imprimirEntrevistasPersona(rutPersona) {
   const ids = filtradas.map(e => e.id).join(',');
   goTo(`reporte?ids=${ids}`);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUTOCOMPLETE EN TIEMPO REAL PARA NUEVA ENTREVISTA (NOMBRE / RUT)
+// ══════════════════════════════════════════════════════════════════════════════
+
+let autocompleteActiveIdx = -1;
+let currentAutocompleteMatches = [];
+let autocompleteSearchTimeout = null;
+
+function setupEntrevistaAutocomplete() {
+  const inputNombre = document.getElementById('e-nombre');
+  const inputRut = document.getElementById('e-rut');
+
+  if (inputNombre && !inputNombre._autocompleteBound) {
+    inputNombre._autocompleteBound = true;
+    
+    inputNombre.addEventListener('input', (e) => {
+      onEntrevistaInputTyped('e-nombre', 'e-nombre-suggestions', e.target.value);
+    });
+
+    inputNombre.addEventListener('focus', (e) => {
+      if (e.target.value.trim().length >= 1) {
+        onEntrevistaInputTyped('e-nombre', 'e-nombre-suggestions', e.target.value);
+      }
+    });
+
+    inputNombre.addEventListener('keydown', (e) => {
+      handleAutocompleteKeydown(e, 'e-nombre-suggestions');
+    });
+  }
+
+  if (inputRut && !inputRut._autocompleteBound) {
+    inputRut._autocompleteBound = true;
+
+    inputRut.addEventListener('input', (e) => {
+      onEntrevistaInputTyped('e-rut', 'e-rut-suggestions', e.target.value);
+    });
+
+    inputRut.addEventListener('focus', (e) => {
+      if (e.target.value.trim().length >= 2) {
+        onEntrevistaInputTyped('e-rut', 'e-rut-suggestions', e.target.value);
+      }
+    });
+
+    inputRut.addEventListener('keydown', (e) => {
+      handleAutocompleteKeydown(e, 'e-rut-suggestions');
+    });
+  }
+
+  // Cerrar sugerencias al hacer clic fuera
+  if (!window._autocompleteClickOutsideBound) {
+    window._autocompleteClickOutsideBound = true;
+    document.addEventListener('pointerdown', (e) => {
+      const sugNombre = document.getElementById('e-nombre-suggestions');
+      const sugRut = document.getElementById('e-rut-suggestions');
+      const inputNom = document.getElementById('e-nombre');
+      const inputRutEl = document.getElementById('e-rut');
+
+      if (sugNombre && !sugNombre.contains(e.target) && e.target !== inputNom) {
+        sugNombre.style.display = 'none';
+      }
+      if (sugRut && !sugRut.contains(e.target) && e.target !== inputRutEl) {
+        sugRut.style.display = 'none';
+      }
+    });
+  }
+}
+
+function onEntrevistaInputTyped(inputId, dropdownId, rawQuery) {
+  const dropdown = document.getElementById(dropdownId);
+  if (!dropdown) return;
+
+  const q = (rawQuery || '').trim();
+  if (q.length < 1) {
+    dropdown.style.display = 'none';
+    dropdown.innerHTML = '';
+    currentAutocompleteMatches = [];
+    autocompleteActiveIdx = -1;
+    return;
+  }
+
+  if (autocompleteSearchTimeout) clearTimeout(autocompleteSearchTimeout);
+  
+  autocompleteSearchTimeout = setTimeout(async () => {
+    const matches = await buscarPersonasParaAutocomplete(q);
+    currentAutocompleteMatches = matches;
+    autocompleteActiveIdx = -1;
+    renderAutocompleteDropdown(dropdownId, matches);
+  }, 120);
+}
+
+async function buscarPersonasParaAutocomplete(q) {
+  const cleanQ = q.toLowerCase();
+  const cleanRutQ = q.replace(/[^0-9kK]/g, '').toUpperCase();
+  
+  let candidates = [];
+
+  // 1. Buscar en memoria local (estudiantes)
+  if (typeof estudiantes !== 'undefined' && Array.isArray(estudiantes) && estudiantes.length > 0) {
+    estudiantes.forEach(s => {
+      if (!s) return;
+      const nom = [
+        s.Nombres || s.nombres || '',
+        s['Apellido Paterno'] || s.apellido_paterno || '',
+        s['Apellido Materno'] || s.apellido_materno || ''
+      ].filter(Boolean).join(' ').trim().replace(/\s+/g, ' ');
+
+      const rawRut = s.RUT || s.Rut || s.rut || '';
+      const cRut = rawRut.replace(/[^0-9kK]/g, '').toUpperCase();
+
+      if ((nom && nom.toLowerCase().includes(cleanQ)) || (cleanRutQ && cRut.includes(cleanRutQ))) {
+        candidates.push({
+          rut: rawRut,
+          formattedRut: formatearRut(rawRut) || rawRut,
+          nombreCompleto: nom,
+          cargo: txt(s.Cargo || s.cargo || 'Estudiante'),
+          curso: txt(s.Curso || s.curso || 'No asignado'),
+          jefe: txt(s['Profesor Jefe'] || s.profesor_jefe || s['Profesor jefe (curso)'] || 'No asignado'),
+          asig: txt(s['Asignatura'] || s.asignatura || s['Profesor de Asignatura'] || s.profesor_asignatura || 'No aplica'),
+          pie: txt(s['Profesor PIE'] || s.profesor_pie || 'No aplica')
+        });
+      }
+    });
+  }
+
+  // 2. Consultar backend /api/personas/buscar?q=... (estudiantes, docentes, asistentes)
+  try {
+    const res = await fetch(`/api/personas/buscar?q=${encodeURIComponent(q)}`);
+    if (res.ok) {
+      const apiResults = await res.json();
+      if (Array.isArray(apiResults)) {
+        apiResults.forEach(p => {
+          const rawRut = p.RUT || p.Rut || p.rut || '';
+          const cRut = rawRut.replace(/[^0-9kK]/g, '').toUpperCase();
+
+          const nom = [
+            p.Nombres || p.nombres || '',
+            p['Apellido Paterno'] || p['Apellido paterno'] || p.apellido_paterno || '',
+            p['Apellido Materno'] || p['Apellido materno'] || p.apellido_materno || ''
+          ].filter(Boolean).join(' ').trim().replace(/\s+/g, ' ');
+
+          // Evitar duplicados por RUT
+          if (!candidates.some(c => (c.rut || '').replace(/[^0-9kK]/g, '').toUpperCase() === cRut)) {
+            candidates.push({
+              rut: rawRut,
+              formattedRut: formatearRut(rawRut) || rawRut,
+              nombreCompleto: nom,
+              cargo: txt(p.Cargo || p.cargo || p.Perfil || 'Estudiante'),
+              curso: txt(p.Curso || p.curso || p['Función/curso'] || p.funcion_curso || 'No asignado'),
+              jefe: txt(p['Profesor Jefe'] || p.profesor_jefe || p['Profesor jefe (curso)'] || 'No asignado'),
+              asig: txt(p['Asignatura'] || p.asignatura || p['Profesor de Asignatura'] || p.profesor_asignatura || 'No aplica'),
+              pie: txt(p['Profesor PIE'] || p.profesor_pie || 'No aplica')
+            });
+          }
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Error buscando autocomplete backend:', err);
+  }
+
+  // Ordenar prioridad: coincidencias que comienzan con el texto ingresado
+  candidates.sort((a, b) => {
+    const aStartsWith = a.nombreCompleto.toLowerCase().startsWith(cleanQ);
+    const bStartsWith = b.nombreCompleto.toLowerCase().startsWith(cleanQ);
+    if (aStartsWith && !bStartsWith) return -1;
+    if (!aStartsWith && bStartsWith) return 1;
+    return a.nombreCompleto.localeCompare(b.nombreCompleto);
+  });
+
+  return candidates.slice(0, 10);
+}
+
+function renderAutocompleteDropdown(dropdownId, matches) {
+  const dropdown = document.getElementById(dropdownId);
+  if (!dropdown) return;
+
+  if (!matches || matches.length === 0) {
+    dropdown.innerHTML = `
+      <div style="padding: 10px 14px; color: var(--text-muted); font-size: 12.5px; text-align: center;">
+        🔍 No se encontraron coincidencias exactas en la base de datos.
+      </div>`;
+    dropdown.style.display = 'flex';
+    return;
+  }
+
+  dropdown.innerHTML = matches.map((m, idx) => {
+    let badgeClass = '';
+    const cargoLower = (m.cargo || '').toLowerCase();
+    if (cargoLower.includes('docente') || cargoLower.includes('profesor')) badgeClass = 'docente';
+    else if (cargoLower.includes('asistente')) badgeClass = 'asistente';
+
+    return `
+      <div class="autocomplete-item ${idx === autocompleteActiveIdx ? 'active' : ''}" 
+           data-idx="${idx}" 
+           onpointerdown="event.preventDefault(); seleccionarPersonaAutocompleteByIndex(${idx});">
+        <div class="item-title">
+          <span>${esc(m.nombreCompleto)}</span>
+          <span class="autocomplete-badge ${badgeClass}">${esc(m.cargo)}</span>
+        </div>
+        <div class="item-sub">
+          <span>🆔 <strong>${esc(m.formattedRut)}</strong></span>
+          <span>📚 ${esc(m.curso)}</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  dropdown.style.display = 'flex';
+}
+
+function handleAutocompleteKeydown(e, dropdownId) {
+  const dropdown = document.getElementById(dropdownId);
+  if (!dropdown || dropdown.style.display === 'none') return;
+
+  const items = dropdown.querySelectorAll('.autocomplete-item');
+  if (!items || items.length === 0) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    autocompleteActiveIdx = (autocompleteActiveIdx + 1) % items.length;
+    updateAutocompleteActiveItem(items);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    autocompleteActiveIdx = (autocompleteActiveIdx - 1 + items.length) % items.length;
+    updateAutocompleteActiveItem(items);
+  } else if (e.key === 'Enter') {
+    if (autocompleteActiveIdx >= 0 && autocompleteActiveIdx < currentAutocompleteMatches.length) {
+      e.preventDefault();
+      seleccionarPersonaAutocompleteByIndex(autocompleteActiveIdx);
+    }
+  } else if (e.key === 'Escape') {
+    dropdown.style.display = 'none';
+  }
+}
+
+function updateAutocompleteActiveItem(items) {
+  items.forEach((it, idx) => {
+    if (idx === autocompleteActiveIdx) {
+      it.classList.add('active');
+      it.scrollIntoView({ block: 'nearest' });
+    } else {
+      it.classList.remove('active');
+    }
+  });
+}
+
+function seleccionarPersonaAutocompleteByIndex(idx) {
+  const persona = currentAutocompleteMatches[idx];
+  if (!persona) return;
+  seleccionarPersonaAutocomplete(persona);
+}
+
+function seleccionarPersonaAutocomplete(p) {
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val || '';
+  };
+
+  setVal('e-rut', p.formattedRut || p.rut);
+  setVal('e-nombre', p.nombreCompleto);
+  setVal('e-cargo', p.cargo || 'Estudiante');
+  setVal('e-curso', p.curso || 'No asignado');
+  setVal('e-jefe', p.jefe || 'No asignado');
+  setVal('e-asig', p.asig || 'No aplica');
+  setVal('e-pie', p.pie || 'No aplica');
+
+  const sugNombre = document.getElementById('e-nombre-suggestions');
+  const sugRut = document.getElementById('e-rut-suggestions');
+  if (sugNombre) sugNombre.style.display = 'none';
+  if (sugRut) sugRut.style.display = 'none';
+
+  if (p.rut) {
+    cargarHistorialCita(p.rut);
+  }
+
+  toast(`✅ Datos cargados: ${p.nombreCompleto}`);
+}
+
+// Inicializar binding al cargar el DOM o el script
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  setTimeout(setupEntrevistaAutocomplete, 300);
+} else {
+  document.addEventListener('DOMContentLoaded', () => setTimeout(setupEntrevistaAutocomplete, 300));
+}
+
 
 
