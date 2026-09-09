@@ -538,6 +538,12 @@ var listaUsuariosGlobal = [];
 var estudiantes = [];
 var docentes = [];
 var asistentes = [];
+var firmasPersonalizadasPorEntrevista = {};
+var firmasExcluidasPorEntrevista = {};
+var contextoFirmaActual = { id: '', origen: 'reporte' };
+var reporteActualEntrevista = null;
+var reporteActualId = '';
+var reporteActualParticipantes = [];
 
 // Mask RUT helper in real-time
 function formatRut(rutStr) {
@@ -1931,9 +1937,11 @@ function llenarReporte(e) {
   }
 
   // Handle adicionales participantes / relatos
+  const metaObsLocal = typeof parseObsMetadata === 'function' ? parseObsMetadata(e.obs || '') : {};
   let partsList = [];
   try {
-    partsList = JSON.parse(e.participantes_relatos || '[]');
+    const rawParts = e.participantes_relatos || metaObsLocal.relatos;
+    partsList = typeof rawParts === 'string' ? JSON.parse(rawParts) : (Array.isArray(rawParts) ? rawParts : []);
   } catch (err) {
     partsList = [];
   }
@@ -1948,7 +1956,7 @@ function llenarReporte(e) {
       pList.innerHTML = partsList.map(p => `
         <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed #cbd5e1;">
           <strong style="color: var(--text-primary);">${esc(p.nombre)}</strong> 
-          <span style="font-size: 11px; color: var(--text-secondary); background: #e2e8f0; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">${esc(p.rol)}</span>
+          <span style="font-size: 11px; color: var(--text-secondary); background: #e2e8f0; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">${esc(p.rol && p.rol !== 'Otro' ? p.rol : 'Participante')}</span>
           <div style="font-size: 12px; color: #334155; margin-top: 4px; font-style: italic; white-space: pre-wrap;">"${esc(p.relato || 'Sin declaración registrada')}"</div>
         </div>
       `).join('');
@@ -1958,33 +1966,19 @@ function llenarReporte(e) {
     }
   }
 
-  if (firmasCont) {
-    let baseFirmas = `
-      <div>
+  if (firmasCont && typeof obtenerFirmasCompletasEntrevista === 'function') {
+    const firmas = obtenerFirmasCompletasEntrevista(e, []);
+    firmasCont.className = "firma-row-multi";
+    firmasCont.style.cssText = "display: flex !important; flex-wrap: wrap !important; justify-content: space-around !important; gap: 30px 15px !important; margin-top: 40px !important; page-break-inside: avoid !important; break-inside: avoid !important;";
+    firmasCont.innerHTML = firmas.map(f => `
+      <div style="flex: 0 0 210px; max-width: 250px; text-align: center; margin-bottom: 20px;">
         <br><br>
         ________________________________________<br>
-        <span style="font-size:11px; font-weight:600">Firma Entrevistador/a Responsable</span>
+        <span style="font-size: 11px; font-weight: 700; color: #0f172a; text-transform: uppercase; display: block; margin-top: 4px;">Firma ${esc(f.cargo.replace(/^Firma\s+/i, ''))}</span>
+        <span style="font-size: 11px; color: #334155; font-weight: 600; display: block;">${esc(f.nombre)}</span>
+        ${f.rut ? `<span style="font-size: 10px; color: #64748b; font-family: monospace; display: block;">RUT: ${esc(f.rut)}</span>` : ''}
       </div>
-      <div>
-        <br><br>
-        ________________________________________<br>
-        <span style="font-size:11px; font-weight:600">Firma Entrevistado/a / Apoderado/a</span>
-      </div>
-    `;
-    if (partsList.length > 0) {
-      partsList.forEach(p => {
-        if (p.nombre) {
-          baseFirmas += `
-            <div>
-              <br><br>
-              ________________________________________<br>
-              <span style="font-size:11px; font-weight:600">Firma: ${esc(p.nombre)} (${esc(p.rol)})</span>
-            </div>
-          `;
-        }
-      });
-    }
-    firmasCont.innerHTML = baseFirmas;
+    `).join('');
   }
 }
 
@@ -2336,7 +2330,8 @@ async function cargarEntrevistaParaEditarDirecto(id) {
   renderAdjuntosForm();
 
   try {
-    participantesRelatosForm = JSON.parse(e.participantes_relatos || '[]');
+    const rawPartsForm = e.participantes_relatos || meta.relatos;
+    participantesRelatosForm = typeof rawPartsForm === 'string' ? JSON.parse(rawPartsForm) : (Array.isArray(rawPartsForm) ? rawPartsForm : []);
   } catch (err) {
     participantesRelatosForm = [];
   }
@@ -3320,6 +3315,59 @@ function generarHtmlReporte(e, tieneAcceso, participantes = []) {
       </div>
       
       ${(() => {
+        let pRelatos = [];
+        try {
+          let rawParts = e.participantes_relatos;
+          if (!rawParts && e.obs && typeof parseObsMetadata === 'function') {
+            const metaObs = parseObsMetadata(e.obs);
+            if (metaObs && metaObs.relatos) rawParts = metaObs.relatos;
+          }
+          if (typeof rawParts === 'string') {
+            pRelatos = JSON.parse(rawParts);
+          } else if (Array.isArray(rawParts)) {
+            pRelatos = rawParts;
+          }
+        } catch(err) { pRelatos = []; }
+        if (!Array.isArray(pRelatos) || pRelatos.length === 0) return '';
+        
+        return `
+          <div style="margin-top: 20px; border: 1.5px solid #7dd3fc; border-radius: var(--radius-sm, 8px); background: #f0f9ff; padding: 16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;" class="no-print">
+              <h4 style="font-size: 13px; font-weight: 700; color: #0369a1; margin: 0; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+                👥 Participantes Adicionales y Declaraciones / Relatos (${pRelatos.length})
+              </h4>
+              <button type="button" class="btn btn-sm" onclick="imprimirTodosLosRelatosData('${esc(e.id)}')" style="font-size: 12px; padding: 5px 12px; font-weight: 700; background: #0284c7; border-color: #0284c7; color: white;">
+                🖨️ Imprimir Todos los Relatos
+              </button>
+            </div>
+            <div class="only-print" style="margin-bottom: 10px;">
+              <h4 style="font-size: 13px; font-weight: 700; color: #000; margin: 0; text-transform: uppercase;">
+                👥 Declaraciones / Relatos de Participantes Adicionales
+              </h4>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              ${pRelatos.map((pr, pidx) => `
+                <div style="background: #ffffff; padding: 12px 14px; border-radius: 6px; border: 1px solid #bae6fd; font-size: 12.5px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+                    <div>
+                      <strong style="color: #0f172a; font-size: 13.5px;">👤 ${esc(pr.nombre || 'Participante')}</strong>
+                      <span class="badge" style="margin-left: 8px; font-size: 11px; background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-weight: 700; border: 1px solid #bae6fd;">${esc(pr.rol || 'Participante')}</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-secondary no-print" onclick="imprimirRelatoIndividualData('${esc(e.id)}', ${pidx})" style="font-size: 11.5px; padding: 3px 10px; font-weight: 600; color: #0369a1; border-color: #7dd3fc; background: #ffffff;" title="Imprimir solo esta declaración individual">
+                      🖨️ Imprimir este relato
+                    </button>
+                  </div>
+                  <div style="color: #334155; white-space: pre-wrap; font-style: normal; background: #f8fafc; padding: 10px 12px; border-left: 3.5px solid #0284c7; border-radius: 4px; line-height: 1.55;">
+                    "${esc(pr.relato || '(Sin relato registrado)')}"
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      })()}
+      
+      ${(() => {
         const commentedParts = (participantes || []).filter(p => p.estado === 'COMENTADO');
         if (commentedParts.length === 0) return '';
         return `
@@ -3365,18 +3413,7 @@ function generarHtmlReporte(e, tieneAcceso, participantes = []) {
         `;
       })()}
       
-      <div class="firma-row">
-        <div>
-          <br><br>
-          ________________________________________<br>
-          <span style="font-size:11px; font-weight:600">Firma Entrevistador/a Responsable</span>
-        </div>
-        <div>
-          <br><br>
-          ________________________________________<br>
-          <span style="font-size:11px; font-weight:600">Firma Entrevistado/a / Apoderado/a</span>
-        </div>
-      </div>
+      ${generarHtmlBloqueFirmasReporte(e, participantes)}
     </div>
   `;
 }
@@ -3644,6 +3681,10 @@ async function cargarReporteDesdeHash(id, print) {
     console.error("Error loading participants:", err);
   }
   
+  reporteActualEntrevista = e;
+  reporteActualId = cleanId;
+  reporteActualParticipantes = participantes;
+
   const rptCont = document.getElementById('reporte');
   if (rptCont) {
     rptCont.innerHTML = generarHtmlReporte(e, tieneAcceso, participantes);
@@ -6489,6 +6530,7 @@ function renderParticipantesRelatosForm() {
 
   participantesRelatosForm.forEach((p, idx) => {
     const card = document.createElement('div');
+    card.className = 'card card-relato';
     card.style.cssText = 'background: #fff; padding: 14px; border-radius: 8px; border: 1px solid #7dd3fc; display: flex; flex-direction: column; gap: 10px;';
     
     const usersList = Array.isArray(listaUsuariosGlobal) ? listaUsuariosGlobal : [];
@@ -6570,7 +6612,18 @@ function renderParticipantesRelatosForm() {
             </select>
           </div>
 
-          <button type="button" class="btn btn-sm btn-danger" onclick="eliminarParticipanteRelatoForm(${idx})" style="padding: 6px 12px; font-size: 12px; margin-bottom: 1px;">🗑️ Quitar</button>
+          <div style="display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap;">
+            <label style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; color: #0369a1; cursor: pointer; background: #ffffff; padding: 6px 10px; border-radius: 6px; border: 1px solid #7dd3fc; user-select: none;" title="Marcar para imprimir en grupo">
+              <input type="checkbox" class="chk-relato-imprimir" data-idx="${idx}" ${p._imprimir !== false ? 'checked' : ''} onchange="participantesRelatosForm[${idx}]._imprimir = this.checked" style="width: 15px; height: 15px; cursor: pointer; accent-color: #0284c7;">
+              <span>Imprimir</span>
+            </label>
+            <button type="button" class="btn btn-sm" onclick="imprimirRelatoIndividual(${idx})" style="padding: 6px 12px; font-size: 12px; background: #4f46e5; color: white; border: none; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="Imprimir solo esta declaración individual">
+              🖨️ Imprimir este relato
+            </button>
+            <button type="button" class="btn btn-sm btn-danger" onclick="eliminarParticipanteRelatoForm(${idx})" style="padding: 6px 10px; font-size: 12px;" title="Eliminar este relato">
+              🗑️
+            </button>
+          </div>
         </div>
 
         <div>
@@ -6588,16 +6641,61 @@ function renderParticipantesRelatosForm() {
   });
 
   const bottomBar = document.createElement('div');
-  bottomBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 8px; flex-wrap: wrap; gap: 8px;';
+  bottomBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding-top: 10px; border-top: 1px solid #bae6fd; flex-wrap: wrap; gap: 8px;';
   bottomBar.innerHTML = `
-    <button type="button" class="btn btn-sm btn-secondary" onclick="agregarParticipanteRelatoForm()" style="font-size: 12px; font-weight: 700;">
-      + Agregar Otro Participante / Relato
-    </button>
-    <button type="button" class="btn btn-sm btn-success" onclick="guardarParticipantesRelatosSolo()" style="font-size: 12px; font-weight: 700; background: #059669; border-color: #059669;">
-      💾 Guardar Todos los Participantes y Relatos
-    </button>
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <button type="button" class="btn btn-sm btn-secondary" onclick="agregarParticipanteRelatoForm()" style="font-size: 12px; font-weight: 700;">
+        + Agregar Otro Participante / Relato
+      </button>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="toggleTodosRelatosCheckboxes()" style="font-size: 12px; font-weight: 600; background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc;">
+        ☑️ Marcar / Desmarcar Todos
+      </button>
+    </div>
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <button type="button" class="btn btn-sm" onclick="imprimirRelatosSeleccionadosForm()" style="font-size: 12px; font-weight: 700; background: #4f46e5; border-color: #4f46e5; color: #fff;">
+        🖨️ Imprimir Relatos Seleccionados
+      </button>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="abrirModalAgregarFirma('FORM_ACTUAL', 'form')" style="font-size: 12px; font-weight: 700; background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc;" title="Agregar una firma adicional para la impresión">
+        ✍️ + Agregar Firma
+      </button>
+      <button type="button" class="btn btn-sm btn-success" onclick="guardarParticipantesRelatosSolo()" style="font-size: 12px; font-weight: 700; background: #059669; border-color: #059669;">
+        💾 Guardar Todos los Participantes y Relatos
+      </button>
+    </div>
   `;
   cont.appendChild(bottomBar);
+
+  const entIdForm = editandoEntrevistaId || 'FORM_ACTUAL';
+  const firmasForm = obtenerFirmasCompletasEntrevista({
+    id: entIdForm,
+    resp: document.getElementById('e-resp')?.value || sessionStorage.getItem('campanario_user'),
+    nombre: document.getElementById('e-nombre')?.value,
+    cargo: document.getElementById('e-cargo')?.value,
+    rut: document.getElementById('e-rut')?.value,
+    participantes_relatos: participantesRelatosForm
+  }, []);
+
+  const signaturesBar = document.createElement('div');
+  signaturesBar.style.cssText = 'margin-top: 10px; background: #ffffff; border: 1px solid #7dd3fc; border-radius: 6px; padding: 10px 14px;';
+  signaturesBar.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+      <span style="font-size: 12px; font-weight: 700; color: #0369a1; display: flex; align-items: center; gap: 6px;">
+        ✍️ Firmas de Participantes para la Impresión (${firmasForm.length}):
+      </span>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="abrirModalAgregarFirma('${esc(entIdForm)}', 'form')" style="font-size: 11.5px; font-weight: 700; background: #e0f2fe; color: #0369a1; border-color: #7dd3fc; padding: 3px 10px;">
+        + Agregar Firma Adicional
+      </button>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
+      ${firmasForm.map(f => `
+        <span style="background: #f0f9ff; border: 1px solid #bae6fd; color: #0369a1; font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">
+          👤 ${esc(f.cargo.replace(/^Firma\s+/i, ''))}: ${esc(f.nombre)}
+          <button type="button" onclick="excluirFirmaReporte('${esc(entIdForm)}', '${esc(f.id)}'); renderParticipantesRelatosForm();" style="border: none; background: transparent; color: #ef4444; font-weight: bold; cursor: pointer; padding: 0 2px; font-size: 12px;" title="Quitar de la impresión">✕</button>
+        </span>
+      `).join('')}
+    </div>
+  `;
+  cont.appendChild(signaturesBar);
 }
 
 async function guardarParticipantesRelatosSolo() {
@@ -6656,7 +6754,661 @@ async function guardarParticipantesRelatosSolo() {
   }
 }
 
-// ══════════════ RENDERING HISTORIAL AGRUPADO (CURSO / ESTAMENTO) ══════════════
+// ══════════════ IMPRESIÓN DE RELATOS / DECLARACIONES (INDIVIDUAL Y GRUPAL) ══════════════
+
+function sincronizarParticipantesRelatosDesdeDom() {
+  if (!Array.isArray(participantesRelatosForm)) return;
+  const cont = document.getElementById('e-participantes-relatos-list');
+  if (!cont) return;
+  const cardElements = cont.querySelectorAll('.card-relato');
+  cardElements.forEach((cEl, idx) => {
+    if (!participantesRelatosForm[idx]) return;
+    const chk = cEl.querySelector('.chk-relato-imprimir');
+    if (chk) participantesRelatosForm[idx]._imprimir = chk.checked;
+    const nameInput = cEl.querySelector('input[type="text"]');
+    if (nameInput) participantesRelatosForm[idx].nombre = nameInput.value;
+    const txtArea = cEl.querySelector('textarea');
+    if (txtArea) participantesRelatosForm[idx].relato = txtArea.value;
+    const selRol = cEl.querySelector('select:last-of-type');
+    if (selRol && selRol.value) participantesRelatosForm[idx].rol = selRol.value;
+  });
+}
+
+function toggleTodosRelatosCheckboxes() {
+  sincronizarParticipantesRelatosDesdeDom();
+  if (!Array.isArray(participantesRelatosForm) || participantesRelatosForm.length === 0) {
+    toast("⚠️ No hay relatos agregados para seleccionar");
+    return;
+  }
+  const algunoDesmarcado = participantesRelatosForm.some(p => p._imprimir === false);
+  const nuevoEstado = algunoDesmarcado;
+  participantesRelatosForm.forEach(p => {
+    p._imprimir = nuevoEstado;
+  });
+  const chks = document.querySelectorAll('#e-participantes-relatos-list .chk-relato-imprimir');
+  chks.forEach(c => { c.checked = nuevoEstado; });
+  toast(nuevoEstado ? "☑️ Todos los relatos marcados para imprimir" : "⬜ Todos los relatos desmarcados");
+}
+
+// ══════════════ GESTIÓN DINÁMICA DE FIRMAS (ENTREVISTA Y RELATOS) ══════════════
+
+function obtenerFirmasCompletasEntrevista(e, participantesServidor = []) {
+  if (!e) return [];
+  const entId = e.id || 'NUEVA';
+  const excluidas = firmasExcluidasPorEntrevista[entId] || [];
+  const personalizadas = firmasPersonalizadasPorEntrevista[entId] || [];
+
+  const lista = [];
+
+  // 1. Entrevistador/a Responsable
+  const respNombre = (e.resp || sessionStorage.getItem('campanario_user') || 'Entrevistador/a Responsable').trim();
+  const idResp = 'resp_' + respNombre.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  if (!excluidas.includes(idResp) && respNombre) {
+    lista.push({
+      id: idResp,
+      nombre: respNombre,
+      cargo: 'Firma Entrevistador/a Responsable',
+      rut: '',
+      fijo: false
+    });
+  }
+
+  // 2. Entrevistado/a Principal (Estudiante o Apoderado/a)
+  if (e.nombre && e.nombre.trim()) {
+    const nomEnt = e.nombre.trim();
+    const cargoEntrevistado = e.cargo ? `Firma ${e.cargo}` : 'Firma Entrevistado/a / Estudiante';
+    const idEnt = 'entrevistado_' + nomEnt.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    if (!excluidas.includes(idEnt)) {
+      lista.push({
+        id: idEnt,
+        nombre: nomEnt,
+        cargo: cargoEntrevistado,
+        rut: e.rut || '',
+        fijo: false
+      });
+    }
+  }
+
+  // 3. Participantes y Relatos adicionales de la entrevista
+  let pRelatos = [];
+  try {
+    let rawParts = e.participantes_relatos;
+    if (!rawParts && e.obs && typeof parseObsMetadata === 'function') {
+      const metaObs = parseObsMetadata(e.obs);
+      if (metaObs && metaObs.relatos) rawParts = metaObs.relatos;
+    }
+    if (typeof rawParts === 'string') {
+      pRelatos = JSON.parse(rawParts);
+    } else if (Array.isArray(rawParts)) {
+      pRelatos = rawParts;
+    }
+  } catch(err) { pRelatos = []; }
+
+  if (Array.isArray(pRelatos)) {
+    pRelatos.forEach((p, idx) => {
+      if (!p || !p.nombre || !p.nombre.trim()) return;
+      const nom = p.nombre.trim();
+      const idPart = 'part_' + nom.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      if (excluidas.includes(idPart)) return;
+      if (lista.some(item => item.nombre.toLowerCase() === nom.toLowerCase())) return;
+
+      const cargoRol = p.rol && p.rol.trim() && p.rol.trim().toLowerCase() !== 'otro' ? p.rol.trim() : 'Participante';
+      lista.push({
+        id: idPart,
+        nombre: nom,
+        cargo: `Firma ${cargoRol}`,
+        rut: p.rut || '',
+        fijo: false
+      });
+    });
+  }
+
+  // 4. Participantes invitados del servidor con comentarios o asistencia
+  if (Array.isArray(participantesServidor)) {
+    participantesServidor.forEach(ps => {
+      const nom = (ps.nombre_completo || ps.username || '').trim();
+      if (!nom) return;
+      const idSrv = 'srv_' + nom.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      if (excluidas.includes(idSrv)) return;
+      if (lista.some(item => item.nombre.toLowerCase() === nom.toLowerCase())) return;
+
+      lista.push({
+        id: idSrv,
+        nombre: nom,
+        cargo: `Firma ${ps.perfil || 'Docente / Participante'}`,
+        rut: '',
+        fijo: false
+      });
+    });
+  }
+
+  // 5. Firmas agregadas manualmente por el usuario
+  personalizadas.forEach((custom, cIdx) => {
+    const idCustom = custom.id || ('custom_' + cIdx);
+    if (excluidas.includes(idCustom)) return;
+    lista.push({
+      id: idCustom,
+      nombre: custom.nombre,
+      cargo: custom.cargo ? (custom.cargo.startsWith('Firma') ? custom.cargo : 'Firma ' + custom.cargo) : 'Firma Participante Adicional',
+      rut: custom.rut || '',
+      fijo: false,
+      personalizada: true
+    });
+  });
+
+  return lista;
+}
+
+function generarHtmlBloqueFirmasReporte(e, participantes = []) {
+  const entId = e && e.id ? e.id : 'NUEVA';
+  const firmas = obtenerFirmasCompletasEntrevista(e, participantes);
+
+  return `
+    <div id="reporte-firmas-container" data-ent-id="${esc(entId)}">
+      <!-- PANEL CONFIGURADOR DE FIRMAS (NO SE IMPRIME) -->
+      <div class="card no-print" style="margin-top: 25px; margin-bottom: 15px; border: 1.5px solid #0284c7; background: #f0f9ff; padding: 16px 18px; border-radius: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h4 style="font-size: 13.5px; font-weight: 700; color: #0369a1; margin: 0; display: flex; align-items: center; gap: 6px;">
+              ✍️ Firmas de Participantes para el Documento Oficial (${firmas.length})
+            </h4>
+            <span style="font-size: 11.5px; color: #475569; margin-top: 3px; display: block;">
+              Se incluyen automáticamente todos los participantes y declarantes de esta entrevista. Puedes agregar más firmas o remover las que no correspondan antes de imprimir:
+            </span>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <button type="button" class="btn btn-sm btn-primary" onclick="abrirModalAgregarFirma('${esc(entId)}', 'reporte')" style="font-size: 12px; font-weight: 700; background: #0284c7; border-color: #0284c7;">
+              + Agregar Más Firmas
+            </button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="restablecerFirmasReporte('${esc(entId)}')" style="font-size: 11.5px; font-weight: 600; background: #ffffff; color: #64748b;" title="Restablecer firmas automáticas originales">
+              ↺ Restaurar Firmas
+            </button>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;">
+          ${firmas.map(f => `
+            <div style="background: #ffffff; border: 1px solid #7dd3fc; padding: 5px 10px; border-radius: 6px; font-size: 12px; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+              <span><strong>${esc(f.cargo.replace(/^Firma\s+/i, ''))}:</strong> ${esc(f.nombre)} ${f.rut ? `<span style="color:#64748b; font-size:11px;">(${esc(f.rut)})</span>` : ''}</span>
+              <button type="button" onclick="excluirFirmaReporte('${esc(entId)}', '${esc(f.id)}')" style="border: none; background: transparent; color: #ef4444; font-weight: bold; cursor: pointer; padding: 0 2px; font-size: 13px;" title="Quitar de la impresión">✕</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- SECCIÓN FIRMAS OFICIALES (SE IMPRIME) -->
+      <div class="firma-row-multi" style="display: flex !important; flex-wrap: wrap !important; justify-content: space-around !important; gap: 35px 20px !important; margin-top: 50px !important; page-break-inside: avoid !important; break-inside: avoid !important;">
+        ${firmas.map(f => `
+          <div style="flex: 0 0 220px; max-width: 260px; text-align: center; margin-bottom: 25px;">
+            <br><br>
+            ________________________________________<br>
+            <span style="font-size: 11px; font-weight: 700; color: #0f172a; text-transform: uppercase; display: block; margin-top: 4px;">Firma ${esc(f.cargo.replace(/^Firma\s+/i, ''))}</span>
+            <span style="font-size: 11px; color: #334155; font-weight: 600; display: block;">${esc(f.nombre)}</span>
+            ${f.rut ? `<span style="font-size: 10px; color: #64748b; font-family: monospace; display: block;">RUT: ${esc(f.rut)}</span>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function actualizarBloqueFirmasReporte(entId) {
+  const container = document.getElementById('reporte-firmas-container');
+  if (container) {
+    const e = (entrevistas || []).find(x => x.id && x.id.toUpperCase() === String(entId).trim().toUpperCase()) || reporteActualEntrevista;
+    if (!e) return;
+    const participantes = Array.isArray(reporteActualParticipantes) ? reporteActualParticipantes : [];
+    container.outerHTML = generarHtmlBloqueFirmasReporte(e, participantes);
+    return;
+  }
+  const staticContainer = document.getElementById('r-firmas-container');
+  if (staticContainer) {
+    const e = (entrevistas || []).find(x => x.id && x.id.toUpperCase() === String(entId).trim().toUpperCase()) || reporteActualEntrevista;
+    if (e && typeof llenarReporte === 'function') {
+      llenarReporte(e);
+    }
+  }
+}
+
+function excluirFirmaReporte(entId, firmaId) {
+  if (!firmasExcluidasPorEntrevista[entId]) {
+    firmasExcluidasPorEntrevista[entId] = [];
+  }
+  if (!firmasExcluidasPorEntrevista[entId].includes(firmaId)) {
+    firmasExcluidasPorEntrevista[entId].push(firmaId);
+  }
+  if (firmasPersonalizadasPorEntrevista[entId]) {
+    firmasPersonalizadasPorEntrevista[entId] = firmasPersonalizadasPorEntrevista[entId].filter(f => f.id !== firmaId);
+  }
+  actualizarBloqueFirmasReporte(entId);
+  toast("Firma excluida de la impresión");
+}
+
+function restablecerFirmasReporte(entId) {
+  firmasExcluidasPorEntrevista[entId] = [];
+  firmasPersonalizadasPorEntrevista[entId] = [];
+  actualizarBloqueFirmasReporte(entId);
+  toast("Firmas restablecidas a los participantes de la entrevista");
+}
+
+function abrirModalAgregarFirma(entrevistaId, origen = 'reporte') {
+  const idTarget = entrevistaId || reporteActualId || 'NUEVA';
+  contextoFirmaActual = { id: idTarget, origen: origen };
+
+  const modal = document.getElementById('modal-agregar-firma');
+  if (!modal) return;
+  
+  const inputNombre = document.getElementById('af-nombre');
+  if (inputNombre) inputNombre.value = '';
+  const selCargo = document.getElementById('af-cargo-select');
+  if (selCargo) selCargo.value = 'Inspector/a General';
+  const customCargo = document.getElementById('af-cargo-custom');
+  if (customCargo) {
+    customCargo.value = '';
+    customCargo.style.display = 'none';
+  }
+  const inputRut = document.getElementById('af-rut');
+  if (inputRut) inputRut.value = '';
+
+  modal.style.display = 'flex';
+  setTimeout(() => { if (inputNombre) inputNombre.focus(); }, 100);
+}
+
+function cerrarModalAgregarFirma() {
+  const modal = document.getElementById('modal-agregar-firma');
+  if (modal) modal.style.display = 'none';
+}
+
+function confirmarAgregarFirma() {
+  const inputNombre = document.getElementById('af-nombre');
+  const selCargo = document.getElementById('af-cargo-select');
+  const customCargo = document.getElementById('af-cargo-custom');
+  const inputRut = document.getElementById('af-rut');
+
+  const nombre = inputNombre ? inputNombre.value.trim() : '';
+  if (!nombre) {
+    toast("⚠️ Ingrese el nombre completo de la persona");
+    return;
+  }
+
+  let cargo = selCargo ? selCargo.value : 'Participante';
+  if (cargo === 'OTRO' && customCargo && customCargo.value.trim()) {
+    cargo = customCargo.value.trim();
+  }
+  const rut = inputRut ? inputRut.value.trim() : '';
+
+  const entId = contextoFirmaActual && contextoFirmaActual.id ? contextoFirmaActual.id : 'NUEVA';
+  if (!firmasPersonalizadasPorEntrevista[entId]) {
+    firmasPersonalizadasPorEntrevista[entId] = [];
+  }
+
+  const firmaObj = {
+    id: 'custom_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+    nombre: nombre,
+    cargo: cargo,
+    rut: rut,
+    personalizada: true
+  };
+
+  firmasPersonalizadasPorEntrevista[entId].push(firmaObj);
+
+  cerrarModalAgregarFirma();
+  toast(`✍️ Firma de ${nombre} agregada para la impresión`);
+
+  if (contextoFirmaActual.origen === 'reporte') {
+    actualizarBloqueFirmasReporte(entId);
+  } else if (contextoFirmaActual.origen === 'form') {
+    renderParticipantesRelatosForm();
+  }
+}
+
+function obtenerMetaEntrevistaActual() {
+  const folio = document.getElementById('e-folio')?.value || (typeof editandoEntrevistaId !== 'undefined' && editandoEntrevistaId ? editandoEntrevistaId : 'NUEVA');
+  const rut = document.getElementById('e-rut')?.value || '';
+  let estudiante = document.getElementById('e-nombre')?.value || '';
+  if (!estudiante && typeof estudiantes !== 'undefined' && Array.isArray(estudiantes)) {
+    const found = estudiantes.find(s => (s.RUT || s.Rut) === rut);
+    if (found) estudiante = `${found.Nombres || ''} ${found['Apellido Paterno'] || ''} ${found['Apellido Materno'] || ''}`.replace(/\s+/g, ' ').trim();
+  }
+  if (!estudiante) estudiante = 'Estudiante / Caso';
+  const curso = document.getElementById('e-curso')?.value || '---';
+  const fecha = document.getElementById('e-fecha')?.value || new Date().toLocaleDateString('es-CL');
+  const hora = document.getElementById('e-hora')?.value || '';
+  const entrevistador = document.getElementById('e-resp')?.value || sessionStorage.getItem('campanario_user') || 'Entrevistador/a Responsable';
+  const tipo = document.getElementById('e-cargo')?.value || 'Entrevista Institucional';
+
+  const entFake = {
+    id: editandoEntrevistaId || 'FORM_ACTUAL',
+    resp: entrevistador,
+    nombre: estudiante,
+    cargo: tipo,
+    rut: rut,
+    participantes_relatos: typeof participantesRelatosForm !== 'undefined' ? participantesRelatosForm : []
+  };
+  const todasLasFirmas = obtenerFirmasCompletasEntrevista(entFake, []);
+
+  return { folio, estudiante, rut, curso, fecha, hora, entrevistador, tipo, todasLasFirmas };
+}
+
+function imprimirRelatoIndividual(idx) {
+  sincronizarParticipantesRelatosDesdeDom();
+  if (!Array.isArray(participantesRelatosForm) || !participantesRelatosForm[idx]) {
+    toast("❌ No se encontró el relato solicitado");
+    return;
+  }
+  const p = participantesRelatosForm[idx];
+  if (!p.relato || !p.relato.trim()) {
+    toast("⚠️ El relato seleccionado no contiene texto aún");
+  }
+  const meta = obtenerMetaEntrevistaActual();
+  const html = generarDocumentoImpresionRelatos([p], meta);
+  imprimirDocumentoHtml(html);
+}
+
+function imprimirRelatosSeleccionadosForm() {
+  sincronizarParticipantesRelatosDesdeDom();
+  if (!Array.isArray(participantesRelatosForm) || participantesRelatosForm.length === 0) {
+    toast("⚠️ No hay relatos agregados para imprimir");
+    return;
+  }
+  const seleccionados = participantesRelatosForm.filter(p => p._imprimir !== false);
+  if (seleccionados.length === 0) {
+    toast("⚠️ No ha seleccionado ningún relato. Marque la casilla 'Imprimir' en los que desee incluir.");
+    return;
+  }
+  const meta = obtenerMetaEntrevistaActual();
+  const html = generarDocumentoImpresionRelatos(seleccionados, meta);
+  imprimirDocumentoHtml(html);
+}
+
+function imprimirTodosLosRelatosForm() {
+  sincronizarParticipantesRelatosDesdeDom();
+  if (!Array.isArray(participantesRelatosForm) || participantesRelatosForm.length === 0) {
+    toast("⚠️ No hay participantes ni relatos agregados para imprimir");
+    return;
+  }
+  const meta = obtenerMetaEntrevistaActual();
+  const html = generarDocumentoImpresionRelatos(participantesRelatosForm, meta);
+  imprimirDocumentoHtml(html);
+}
+
+async function imprimirRelatoIndividualData(entrevistaId, relatoIdx) {
+  let e = (entrevistas || []).find(x => x.id && x.id.toUpperCase() === String(entrevistaId).trim().toUpperCase());
+  if (!e) {
+    try {
+      const res = await fetch('/api/entrevistas');
+      const all = await res.json();
+      e = all.find(x => x.id && x.id.toUpperCase() === String(entrevistaId).trim().toUpperCase());
+    } catch(err) {}
+  }
+  if (!e) {
+    toast("❌ No se encontró la entrevista " + entrevistaId);
+    return;
+  }
+
+  let relatos = [];
+  try {
+    let raw = e.participantes_relatos;
+    if (!raw && e.obs && typeof parseObsMetadata === 'function') {
+      const metaObs = parseObsMetadata(e.obs);
+      if (metaObs && metaObs.relatos) raw = metaObs.relatos;
+    }
+    relatos = typeof raw === 'string' ? JSON.parse(raw) : (Array.isArray(raw) ? raw : []);
+  } catch(err) { relatos = []; }
+
+  const target = relatos[relatoIdx];
+  if (!target) {
+    toast("❌ No se encontró la declaración individual");
+    return;
+  }
+
+  const meta = {
+    folio: e.id,
+    estudiante: e.nombre || 'Estudiante',
+    rut: e.rut || '---',
+    curso: e.curso || '---',
+    fecha: e.fecha || '---',
+    hora: e.hora || '',
+    entrevistador: e.resp || 'Entrevistador/a Responsable',
+    tipo: e.cargo || 'Entrevista',
+    todasLasFirmas: obtenerFirmasCompletasEntrevista(e, [])
+  };
+
+  const html = generarDocumentoImpresionRelatos([target], meta);
+  imprimirDocumentoHtml(html);
+}
+
+async function imprimirTodosLosRelatosData(entrevistaId) {
+  let e = (entrevistas || []).find(x => x.id && x.id.toUpperCase() === String(entrevistaId).trim().toUpperCase());
+  if (!e) {
+    try {
+      const res = await fetch('/api/entrevistas');
+      const all = await res.json();
+      e = all.find(x => x.id && x.id.toUpperCase() === String(entrevistaId).trim().toUpperCase());
+    } catch(err) {}
+  }
+  if (!e) {
+    toast("❌ No se encontró la entrevista " + entrevistaId);
+    return;
+  }
+
+  let relatos = [];
+  try {
+    let raw = e.participantes_relatos;
+    if (!raw && e.obs && typeof parseObsMetadata === 'function') {
+      const metaObs = parseObsMetadata(e.obs);
+      if (metaObs && metaObs.relatos) raw = metaObs.relatos;
+    }
+    relatos = typeof raw === 'string' ? JSON.parse(raw) : (Array.isArray(raw) ? raw : []);
+  } catch(err) { relatos = []; }
+
+  if (!relatos || relatos.length === 0) {
+    toast("⚠️ Esta entrevista no tiene declaraciones o relatos de participantes adicionales");
+    return;
+  }
+
+  const meta = {
+    folio: e.id,
+    estudiante: e.nombre || 'Estudiante',
+    rut: e.rut || '---',
+    curso: e.curso || '---',
+    fecha: e.fecha || '---',
+    hora: e.hora || '',
+    entrevistador: e.resp || 'Entrevistador/a Responsable',
+    tipo: e.cargo || 'Entrevista',
+    todasLasFirmas: obtenerFirmasCompletasEntrevista(e, [])
+  };
+
+  const html = generarDocumentoImpresionRelatos(relatos, meta);
+  imprimirDocumentoHtml(html);
+}
+
+function generarDocumentoImpresionRelatos(relatosAImprimir, meta) {
+  const logoUrl = getLogoUrl();
+  const total = relatosAImprimir.length;
+  
+  const paginasHtml = relatosAImprimir.map((r, i) => {
+    const numeroRelato = total > 1 ? ` (${i + 1} de ${total})` : '';
+    const logoHtml = logoUrl 
+      ? `<img src="${esc(logoUrl)}" alt="Logo" style="max-height: 55px; max-width: 140px; object-fit: contain;">`
+      : `<div style="font-weight: 800; color: #0284c7; font-size: 14px;">LICEO TÉCNICO PROFESIONAL<br>CAMPANARIO</div>`;
+
+    return `
+      <div class="relato-page">
+        <!-- HEADER INSTITUCIONAL -->
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px; border-bottom: 2px solid #0284c7; padding-bottom: 10px;">
+          <tr>
+            <td style="width: 140px; vertical-align: middle;">
+              ${logoHtml}
+            </td>
+            <td style="vertical-align: middle; padding: 0 15px;">
+              <h1 style="font-size: 16px; margin: 0 0 3px 0; color: #0f172a; font-weight: 800; text-transform: uppercase;">Acta Oficial de Declaración y Relato</h1>
+              <p style="margin: 0; font-size: 12px; font-weight: 600; color: #475569;">Liceo Técnico Profesional Campanario — RBD 3941</p>
+              <p style="margin: 2px 0 0 0; font-size: 11px; color: #64748b;">Sistema de Registro y Gestión Institucional 2026</p>
+            </td>
+            <td style="width: 180px; text-align: right; vertical-align: middle; border-left: 1px solid #cbd5e1; padding-left: 12px;">
+              <div style="font-size: 10.5px; color: #64748b; font-weight: 600;">REGISTRO DE DECLARACIÓN${numeroRelato}</div>
+              <div style="font-size: 13px; font-weight: 800; color: #0284c7; margin-top: 2px;">FOLIO: ${esc(meta.folio || 'S/F')}</div>
+              <div style="font-size: 10.5px; color: #475569; margin-top: 2px;">Fecha: ${esc(meta.fecha || '')}</div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- CUADRO CONTEXTO DEL CASO -->
+        <table style="width: 100%; border-collapse: collapse; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 14px; font-size: 12px;">
+          <tr>
+            <td style="padding: 7px 12px; width: 50%; border-bottom: 1px solid #e2e8f0;">
+              <strong style="color: #475569;">👤 Estudiante / Caso Vinculado:</strong><br>
+              <span style="font-size: 13px; font-weight: 700; color: #0f172a;">${esc(meta.estudiante || '---')}</span>
+            </td>
+            <td style="padding: 7px 12px; width: 50%; border-bottom: 1px solid #e2e8f0;">
+              <strong style="color: #475569;">🆔 RUT / Identificación:</strong><br>
+              <span style="font-size: 12.5px; font-family: monospace; font-weight: 700; color: #0f172a;">${esc(meta.rut || '---')}</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 7px 12px;">
+              <strong style="color: #475569;">🏫 Curso / Nivel:</strong> ${esc(meta.curso || '---')} &nbsp;|&nbsp; 
+              <strong style="color: #475569;">Fecha/Hora:</strong> ${esc(meta.fecha || '')} ${esc(meta.hora || '')}
+            </td>
+            <td style="padding: 7px 12px;">
+              <strong style="color: #475569;">✍️ Entrevistador/a Responsable:</strong> ${esc(meta.entrevistador || '---')}
+            </td>
+          </tr>
+        </table>
+
+        <!-- DATOS DEL DECLARANTE -->
+        <div style="border: 1.5px solid #0284c7; border-radius: 6px; background: #ffffff; padding: 12px 14px; margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 8px;">
+            <div style="font-size: 11px; font-weight: 700; color: #0369a1; text-transform: uppercase; letter-spacing: 0.5px;">
+              👤 IDENTIFICACIÓN DEL DECLARANTE / PARTICIPANTE
+            </div>
+            <span style="display: inline-block; font-size: 11.5px; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 3px 10px; border-radius: 999px; border: 1px solid #bae6fd;">
+              ${esc(r.rol || 'Participante')}
+            </span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div style="font-size: 14px; font-weight: 800; color: #0f172a;">
+              ${esc(r.nombre || '(Declarante sin nombre especificado)')}
+            </div>
+            ${r.rut ? `<div style="font-size: 12px; color: #475569; font-family: monospace;"><strong>RUT:</strong> ${esc(r.rut)}</div>` : ''}
+            ${r.curso ? `<div style="font-size: 12px; color: #475569;"><strong>Curso:</strong> ${esc(r.curso)}</div>` : ''}
+            ${r.estamento ? `<div style="font-size: 12px; color: #475569;"><strong>Estamento:</strong> ${esc(r.estamento)}</div>` : ''}
+          </div>
+        </div>
+
+        <!-- RELATO / TESTIMONIO -->
+        <div style="border: 1px solid #cbd5e1; border-radius: 6px; padding: 14px 16px; background: #ffffff; margin-bottom: 14px;">
+          <div style="font-size: 12px; font-weight: 700; color: #0284c7; text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+            <span>📝</span> TEXTO DE LA DECLARACIÓN, APORTE O RELATO:
+          </div>
+          <div style="font-size: 13.5px; line-height: 1.7; color: #1e293b; white-space: pre-wrap; background: #f8fafc; padding: 14px 16px; border-radius: 6px; border-left: 4px solid #0284c7; min-height: 220px; word-break: break-word;">
+${esc(r.relato || '(Sin relato o declaración registrada)')}
+          </div>
+        </div>
+
+        <!-- NOTA LEGAL / INSTITUCIONAL -->
+        <div style="font-size: 10.5px; color: #64748b; font-style: italic; background: #f1f5f9; padding: 8px 12px; border-radius: 4px; margin-bottom: 24px; border: 1px solid #e2e8f0; line-height: 1.4;">
+          <strong>Nota de Confidencialidad y Validez:</strong> El presente testimonio ha sido registrado de forma fidedigna como parte de la entrevista oficial del establecimiento escolar. Toda la información aquí contenida está resguardada bajo los principios de reserva y los protocolos de Convivencia Escolar del Liceo Técnico Profesional Campanario.
+        </div>
+
+        <!-- FIRMAS OFICIALES DE PARTICIPANTES -->
+        <div style="margin-top: 35px; display: flex; flex-wrap: wrap; justify-content: space-around; align-items: flex-end; gap: 25px 15px; page-break-inside: avoid; break-inside: avoid;">
+          ${(Array.isArray(meta.todasLasFirmas) && meta.todasLasFirmas.length > 0 ? meta.todasLasFirmas : [
+            { nombre: r.nombre || 'Declarante', cargo: `Firma ${r.rol || 'Declarante'}`, rut: r.rut || '' },
+            { nombre: meta.entrevistador || 'Entrevistador/a Responsable', cargo: 'Firma Entrevistador/a Responsable', rut: '' },
+            { nombre: 'LTP Campanario', cargo: 'Firma Ministro de Fe / Dirección', rut: '' }
+          ]).map(f => `
+            <div style="flex: 0 0 200px; max-width: 230px; text-align: center; margin-bottom: 15px;">
+              <div style="border-top: 1.5px solid #0f172a; margin-bottom: 6px;"></div>
+              <span style="font-size: 10.5px; font-weight: 700; color: #0f172a; text-transform: uppercase; display: block;">${esc(f.cargo.replace(/^Firma\s+/i, ''))}</span>
+              <span style="font-size: 11px; color: #334155; font-weight: 600; display: block;">${esc(f.nombre)}</span>
+              ${f.rut ? `<span style="font-size: 10px; color: #64748b; font-family: monospace; display: block;">RUT: ${esc(f.rut)}</span>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).join('\n');
+
+  return `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Acta Oficial de Declaración y Relato - ${esc(meta.folio || 'LTP')}</title>
+  <style>
+    @page {
+      size: letter;
+      margin: 18mm 15mm 20mm 15mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #1e293b;
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .relato-page {
+      page-break-after: always;
+      break-after: page;
+      padding: 4px 0 20px 0;
+    }
+    .relato-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+  </style>
+</head>
+<body>
+  ${paginasHtml}
+</body>
+</html>
+  `;
+}
+
+function imprimirDocumentoHtml(htmlContenido) {
+  let iframe = document.getElementById('iframe-impresion-relatos');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'iframe-impresion-relatos';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+  }
+
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(htmlContenido);
+  doc.close();
+
+  setTimeout(() => {
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch (e) {
+      console.warn("Iframe print falló, abriendo ventana alternativa:", e);
+      const win = window.open('', '_blank', 'width=850,height=900');
+      if (win) {
+        win.document.write(htmlContenido);
+        win.document.close();
+        win.focus();
+        setTimeout(() => { win.print(); }, 400);
+      }
+    }
+  }, 400);
+}
+
 // ══════════════ RENDERING HISTORIAL AGRUPADO (CURSO / ESTAMENTO) ══════════════
 function renderHistorialAgrupado(entrevistasRows, modoAgrupar) {
   const cont = document.getElementById('hist-contenedor-agrupado');
